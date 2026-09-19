@@ -13,7 +13,7 @@
 | **REPO** | Rafa-Innerchispa/inneros-executable-world-2026 |
 | **BRANCH** | main |
 | **OLD SHA** | cb8c487be1520aad55a3e947cfa4e939c6589c3e |
-| **NEW SHA** | a0fbdc1 (pending report commit) |
+| **NEW SHA** | 864f80683382539d4fb0e3c4ef5ebc59e20f078d |
 | **TESTS** | 120 PASS (`pytest tests -q`) |
 | **PUBLIC URL** | https://executable.creatorcore.ai |
 | **PUBLIC HEALTH** | OK (`/healthz` → `ok: true`) |
