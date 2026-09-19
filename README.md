@@ -1,6 +1,11 @@
 # InnerOS Executable World 2026
 
-**`executable.creatorcore.ai`** — provider-agnostic sovereign runtime for hackathon demos.
+[![CI](https://github.com/Rafa-Innerchispa/inneros-executable-world-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/Rafa-Innerchispa/inneros-executable-world-2026/actions/workflows/ci.yml)
+
+**Public repo:** https://github.com/Rafa-Innerchispa/inneros-executable-world-2026  
+**Live demo:** https://executable.creatorcore.ai
+
+Provider-agnostic sovereign runtime for hackathon demos.
 
 > InnerOS is not another cloud agent. The intelligence and execution core runs locally.
 > Cloud AI services are replaceable capabilities that can be attached or removed without
