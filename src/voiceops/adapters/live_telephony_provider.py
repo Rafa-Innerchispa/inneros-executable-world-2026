@@ -24,7 +24,7 @@ def fetch_ami_telephony_snapshot() -> dict[str, Any]:
         adapter = GrandstreamAMIAdapter()
         peers = adapter.list_sip_peers()
         core = adapter.core_status()
-    except (AMIError, AMIAuthenticationError, ValueError) as exc:
+    except (AMIError, AMIAuthenticationError, ValueError, TimeoutError, OSError) as exc:
         return {
             "truth": "UNVERIFIED",
             "source_provider": f"Grandstream AMI TCP 7777 ({host})",

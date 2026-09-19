@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0f1419">
-  <title>InnerOS Executable World — Sovereign Local Core</title>
+  <meta name="theme-color" content="#f8fafc">
+  <title>InnerOS Executable World</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="canonical-theme">
+<body class="executable-theme">
+  <div class="ambient-bg" aria-hidden="true"></div>
   <div class="app-layout">
 
     <!-- Top Header -->
@@ -22,48 +23,33 @@
           </svg>
           <div class="brand-text">
             <span class="brand-title">InnerOS <strong>Executable World</strong></span>
-            <span class="brand-sub">Local core · Optional cloud adapters · Grandstream · Home Assistant LIVE</span>
+            <span class="brand-sub" data-i18n="brand.sub">Governed operations · Guayaquil</span>
           </div>
         </div>
         <div class="site-tag">
           <span class="pulse-dot green"></span>
-          <span>Guayaquil Operations Hub (GYE-Node-01)</span>
+          <span>GYE-Node-01</span>
         </div>
       </div>
 
       <div class="header-center">
         <div class="model-badge">
-          <span class="badge-label">RUNTIME</span>
-          <span class="badge-val">Local Qwen · Provider-agnostic · Graceful degradation</span>
+          <span class="badge-label">Runtime</span>
+          <span class="badge-val">Core local · Adapters opcionales</span>
         </div>
       </div>
 
       <div class="header-right">
-        <div class="governance-status">
-          <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-          <span>Fail-Closed Governance Active</span>
-        </div>
-        <span class="badge-pill">NO PROD WRITES</span>
-        <span id="audioSourceBadge" class="badge-pill">AUDIO_SOURCE: UNKNOWN</span>
-        <button id="refreshTelemetryBtn" class="btn btn-outline btn-sm">Sync Telemetry</button>
+        <span id="activeProviderRoute" class="header-status-chip">Route: standby</span>
+        <span id="audioSourceBadge" class="header-status-chip">Voz: standby</span>
+        <button type="button" id="langToggleBtn" class="btn btn-outline btn-sm">Español</button>
+        <button id="refreshTelemetryBtn" class="btn btn-outline btn-sm" data-i18n="header.refresh">Refresh</button>
       </div>
     </header>
 
-    <!-- Critical Alert Banner -->
-    <div id="alertBanner" class="alert-banner">
-      <div class="alert-content">
-        <span class="alert-badge">OPERATIONS</span>
-        <span id="alertMessage" class="alert-text">
-          Telemetry active: [NETWORK_WIFI] Alert on AP-SolarYard (18% Packet Loss) · [SOLAR] 3,840W Normal · [PBX] 4 Extensions Active
-        </span>
-      </div>
-      <div class="alert-metrics">
-        <span class="metric-pill">Voice: <strong>AssemblyAI</strong></span>
-        <span class="metric-pill">Governance: <strong>Fail-Closed</strong></span>
-        <span class="metric-pill">Site: <strong>GYE-Node-01</strong></span>
-      </div>
+    <div id="alertBanner" class="status-strip">
+      <span id="alertMessage" class="status-strip-text" data-i18n="alert.connecting">Connecting site telemetry…</span>
+      <span class="status-strip-text" style="margin-left:12px; opacity:0.85;">NO PROD WRITES</span>
     </div>
 
     <!-- Main Workspace Container -->
@@ -85,7 +71,7 @@
                 <h2 id="agentStateTitle">Executable Voice Dispatcher</h2>
                 <span id="audioPlayingTag" class="audio-tag hidden">SPEAKING AUDIO</span>
               </div>
-              <p id="agentStateSubtitle">Governed voice execution with live Home Assistant telemetry and UCM6104 telephony</p>
+              <p id="agentStateSubtitle" data-i18n="voice.subtitle">Governed voice with live telemetry and authorized actions</p>
             </div>
           </div>
 
@@ -107,22 +93,49 @@
           </div>
 
           <div class="voice-config-row">
-            <span class="voice-select-label">Audio Output:</span>
-            <span id="assemblyaiVoiceBadge" class="boson-voice-badge">AssemblyAI Voice Agent · anna</span>
+            <label class="voice-select-label" for="voiceProviderSelect" data-i18n="voice.channel">Voice channel:</label>
+            <select id="voiceProviderSelect" class="voice-provider-select" aria-label="Voice channel">
+              <option value="assemblyai">AssemblyAI (cloud)</option>
+              <option value="boson" selected>Boson Higgs (S2S)</option>
+              <option value="browser_local">Browser STT/TTS</option>
+              <option value="telephony">IP Phone (PBX call)</option>
+            </select>
+            <label class="voice-select-label" for="telephonyVoiceSelect" data-i18n="tel.provider">Voice provider for call</label>
+            <select id="telephonyVoiceSelect" class="voice-provider-select" aria-label="Voice provider for telephony">
+              <option value="assemblyai">AssemblyAI · Lola (cloud)</option>
+              <option value="boson">Boson Higgs · S2S (cloud)</option>
+              <option value="browser_local">InnerOS · server local (no cloud voice)</option>
+            </select>
+            <button type="button" id="testAudioBtn" class="btn btn-outline btn-sm" data-i18n="voice.test">Test audio</button>
+            <span id="assemblyaiVoiceBadge" class="boson-voice-badge">AssemblyAI · Lola</span>
           </div>
-          <div id="voiceAgentStatus" class="assemblyai-live-status">STANDBY</div>
-          <div id="agentTranscript" class="agent-transcript-box">Agent voice transcript appears here during a live session.</div>
+          <div id="reasoningBadge" class="reasoning-badge" data-i18n="voice.reasoning">Reasoning: select a voice channel</div>
 
-          <div class="scenario-bar">
-            <span class="scenario-label">Judge Demo Scenarios:</span>
-            <button class="pill-btn" onclick="triggerScenario('inspect')">1. Full Site Diagnostics</button>
-            <button class="pill-btn" onclick="triggerScenario('barge_in')">2. Instant Barge-In (&lt;50ms)</button>
-            <button class="pill-btn" onclick="triggerScenario('code_switch')">3. Technical Code-Switching</button>
-            <button class="pill-btn" onclick="triggerScenario('approve')">4. Governed Action Approval</button>
-            <button class="pill-btn" onclick="triggerScenario('reject')">5. Fail-Closed Ambiguity Block</button>
-            <button class="pill-btn" onclick="triggerScenario('incident_analysis')">6. Qwen Incident Analysis</button>
-            <button class="pill-btn" onclick="triggerScenario('zoiper_test')">7. Live Zoiper Connect/Drop</button>
+          <div id="telephonyPanel" class="telephony-panel hidden">
+            <h4 data-i18n="tel.title">IP Phone — call my extension</h4>
+            <p class="telephony-help" data-i18n="tel.help">Keep Zoiper registered on your phone as the extension below. InnerOS calls that extension; the selected voice provider speaks on the call.</p>
+            <div class="telephony-row">
+              <label for="telephonyExtInput" data-i18n="tel.ext">Your extension</label>
+              <input id="telephonyExtInput" type="text" value="1004" placeholder="1004" />
+            </div>
+            <div class="telephony-actions">
+              <button type="button" id="telephonyDialBtn" class="btn btn-primary btn-sm" data-i18n="tel.call">Call extension with voice agent</button>
+            </div>
+            <pre id="telephonyPlanOut" class="telephony-plan"></pre>
           </div>
+
+          <div id="voiceAgentStatus" class="assemblyai-live-status">STANDBY</div>
+          <div id="liveVoiceCaption" class="live-voice-caption hidden" aria-live="polite"></div>
+
+          <details class="scenario-advanced">
+            <summary data-i18n="scenario.summary">Test scenarios</summary>
+            <div class="scenario-bar">
+              <button class="pill-btn" type="button" onclick="triggerScenario('inspect')">Diagnóstico</button>
+              <button class="pill-btn" type="button" onclick="triggerScenario('approve')">Aprobación</button>
+              <button class="pill-btn" type="button" onclick="triggerScenario('reject')">Bloqueo</button>
+              <button class="pill-btn" type="button" onclick="triggerScenario('incident_analysis')">Análisis Qwen</button>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -134,7 +147,7 @@
           <div class="card panel">
             <div class="panel-header">
               <h3>Site Telemetry (Guayaquil)</h3>
-              <span class="badge-live"><span class="pulse-dot green"></span> LIVE STREAM</span>
+              <span class="badge-live"><span class="pulse-dot green"></span> En vivo</span>
             </div>
             
             <div class="telemetry-sync-ticker">
@@ -151,14 +164,14 @@
                     <strong>Solar Power & Battery Array</strong>
                   </div>
                   <div class="head-badges">
-                    <span class="truth-badge live" id="solTruth">LIVE</span>
-                    <span class="status-indicator optimal" id="solStatus">HEALTHY</span>
+                    <span class="truth-badge unverified" id="solTruth">UNVERIFIED</span>
+                    <span class="status-indicator optimal" id="solStatus">—</span>
                   </div>
                 </div>
                 <div class="subsystem-body">
                   <div class="data-row"><span>AC Output (Inverter):</span><strong id="solGen">—</strong></div>
-                  <div class="data-row"><span>Battery Bank:</span><strong id="solBat">100% (52.4V)</strong></div>
-                  <div class="data-row"><span>Grid Sync:</span><strong id="solGrid">120.6V / 60Hz Guayaquil Grid</strong></div>
+                  <div class="data-row"><span>Battery Bank:</span><strong id="solBat">—</strong></div>
+                  <div class="data-row"><span>Grid Sync:</span><strong id="solGrid">—</strong></div>
                   <div class="provider-sub" id="solProvider">Source: Home Assistant Core / Xmart Inverter (Node AG-41)</div>
                 </div>
               </div>
@@ -171,38 +184,35 @@
                     <strong>Grandstream PBX Telephony</strong>
                   </div>
                   <div class="head-badges">
-                    <span class="truth-badge live" id="telTruth">LIVE</span>
-                    <span class="status-indicator optimal" id="telStatus">ONLINE</span>
+                    <span class="truth-badge unverified" id="telTruth">UNVERIFIED</span>
+                    <span class="status-indicator optimal" id="telStatus">—</span>
                   </div>
                 </div>
                 <div class="subsystem-body">
                   <div class="data-row"><span>Hardware:</span><strong>UCM6104 (UDP 4321)</strong></div>
-                  <div class="data-row"><span>SIP Extensions:</span><strong id="telExts">4 Registered (100, 101, 102, 103)</strong></div>
-                  <div class="data-row"><span>SIP Quality:</span><strong id="telQuality">Jitter 2.1ms (MOS 4.38)</strong></div>
-                  <div style="display:flex; gap:6px; margin: 6px 0;">
-                    <button class="btn btn-xs btn-outline" style="padding:2px 6px; font-size:10px;" onclick="registerZoiperExt('104')">+ Connect Zoiper (104)</button>
-                    <button class="btn btn-xs btn-outline" style="padding:2px 6px; font-size:10px;" onclick="unregisterZoiperExt('104')">- Disconnect Zoiper (104)</button>
-                  </div>
+                  <div class="data-row"><span>SIP Extensions:</span><strong id="telExts">—</strong></div>
+                  <div class="data-row"><span>SIP Quality:</span><strong id="telQuality">—</strong></div>
+                  <div class="provider-sub" style="margin-top:4px;">Extensions polled from Grandstream AMI — register Zoiper on the phone, not here.</div>
                   <div class="provider-sub" id="telProvider">Source: Grandstream UCM6104 (UDP 4321 / TCP 7777 AMI)</div>
                 </div>
               </div>
 
               <!-- WiFi / Network Card -->
-              <div class="subsystem-card alert" id="cardNetwork">
+              <div class="subsystem-card" id="cardNetwork">
                 <div class="subsystem-head">
                   <div class="subsystem-title">
                     <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
                     <strong>Network & Access Points</strong>
                   </div>
                   <div class="head-badges">
-                    <span class="truth-badge live" id="netTruth">LIVE</span>
-                    <span class="status-indicator warning" id="netStatus">ALERT</span>
+                    <span class="truth-badge unverified" id="netTruth">UNVERIFIED</span>
+                    <span class="status-indicator optimal" id="netStatus">—</span>
                   </div>
                 </div>
                 <div class="subsystem-body">
-                  <div class="data-row"><span>Fiber WAN:</span><strong id="netWan">1.0 Gbps (RTT 3.8ms)</strong></div>
-                  <div class="data-row"><span>AP-SolarYard:</span><strong class="text-danger" id="netLoss">18.0% Packet Loss</strong></div>
-                  <div class="data-row"><span>Gateway:</span><strong id="netSwitch">UniFi Gateway Ultra (Online)</strong></div>
+                  <div class="data-row"><span>Fiber WAN:</span><strong id="netWan">—</strong></div>
+                  <div class="data-row"><span>AP-SolarYard:</span><strong id="netLoss">—</strong></div>
+                  <div class="data-row"><span>Gateway:</span><strong id="netSwitch">—</strong></div>
                   <div class="provider-sub" id="netProvider">Source: UniFi Dream Machine & Cloud Gateway Ultra</div>
                 </div>
               </div>
@@ -215,8 +225,8 @@
                     <strong>Intelbras Security Alarm</strong>
                   </div>
                   <div class="head-badges">
-                    <span class="truth-badge live" id="alarmTruth">LIVE</span>
-                    <span class="status-indicator optimal" id="alarmStatus">DISARMED</span>
+                    <span class="truth-badge unverified" id="alarmTruth">UNVERIFIED</span>
+                    <span class="status-indicator optimal" id="alarmStatus">—</span>
                   </div>
                 </div>
                 <div class="subsystem-body">
@@ -235,14 +245,14 @@
                     <strong>Dahua Video Surveillance</strong>
                   </div>
                   <div class="head-badges">
-                    <span class="truth-badge live" id="camTruth">LIVE</span>
-                    <span class="status-indicator optimal" id="camStatus">ACTIVE</span>
+                    <span class="truth-badge unverified" id="camTruth">UNVERIFIED</span>
+                    <span class="status-indicator optimal" id="camStatus">—</span>
                   </div>
                 </div>
                 <div class="subsystem-body">
-                  <div class="data-row"><span>Channels:</span><strong id="camChannels">C1 Acceso Principal · C2 Patio Exterior</strong></div>
-                  <div class="data-row"><span>Motion Event:</span><strong class="text-success" id="camMotion">VideoMotion Stream Online</strong></div>
-                  <div class="data-row"><span>NVR Host:</span><strong>192.168.1.100 (30 FPS)</strong></div>
+                  <div class="data-row"><span>Channels:</span><strong id="camChannels">—</strong></div>
+                  <div class="data-row"><span>Motion Event:</span><strong id="camMotion">—</strong></div>
+                  <div class="data-row"><span>NVR Host:</span><strong id="camNvr">—</strong></div>
                   <div class="provider-sub" id="camProvider">Source: Physical Guardian / Dahua Technology Core</div>
                 </div>
               </div>
@@ -255,7 +265,7 @@
                     <strong>DMX-512 Lighting Control</strong>
                   </div>
                   <div class="head-badges">
-                    <span class="truth-badge live" id="dmxTruth">LIVE</span>
+                    <span class="truth-badge unverified" id="dmxTruth">UNVERIFIED</span>
                     <span class="status-indicator optimal" id="dmxStatus">STANDBY</span>
                   </div>
                 </div>
@@ -290,15 +300,15 @@
 
             <div id="transcriptBox" class="transcript-box">
               <div class="chat-bubble system">
-                <span class="bubble-meta">SYSTEM INITIALIZED</span>
-                <p>Boson AI Higgs Realtime S2S session connected. The agent has direct access to Guayaquil telemetry tools, instant barge-in, and fail-closed operational permits.</p>
+                <span class="bubble-meta" data-i18n="chat.system">SYSTEM</span>
+                <p data-i18n="chat.welcome">InnerOS Executable World ready. Use the microphone or type an instruction; actions require explicit approval.</p>
               </div>
             </div>
 
             <!-- Live Tool Call Ticker -->
             <div class="tool-call-section">
               <div class="tool-header">
-                <span class="tool-title">⚡ Mid-Conversation Function Calls (Higgs &rarr; VoiceOps)</span>
+                <span class="tool-title">Tool calls en conversación</span>
                 <span id="toolLatency" class="tool-latency">0 ms</span>
               </div>
               <div id="toolStream" class="tool-stream">
@@ -443,7 +453,9 @@
 
   </div>
 
-  <script src="/app.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/app.js?v=20260919-higgs-truth"></script>
   <script src="/assemblyai-voice.js"></script>
+  <script src="/voice-router.js?v=20260919-higgs-truth"></script>
 </body>
 </html>

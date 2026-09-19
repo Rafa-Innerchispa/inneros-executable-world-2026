@@ -21,4 +21,5 @@ htmlcov/
 secrets/
 recordings/private/
 evidence/private/
+evidence/voiceops_events.jsonl
 runtime/

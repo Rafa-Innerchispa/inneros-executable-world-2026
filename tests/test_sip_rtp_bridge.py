@@ -155,10 +155,11 @@ class _FakeSocket:
 def test_register_digest_401_to_200() -> None:
     unauthorized = (
         b"SIP/2.0 401 Unauthorized\r\n"
+        b"CSeq: 1 REGISTER\r\n"
         b"WWW-Authenticate: Digest realm=\"grandstream\", nonce=\"n1\", algorithm=MD5, qop=\"auth\"\r\n"
         b"Content-Length: 0\r\n\r\n"
     )
-    ok = b"SIP/2.0 200 OK\r\nContent-Length: 0\r\n\r\n"
+    ok = b"SIP/2.0 200 OK\r\nCSeq: 2 REGISTER\r\nContent-Length: 0\r\n\r\n"
     fake = _FakeSocket([unauthorized, ok])
     client = GrandstreamSipClient(
         host="192.168.1.6",

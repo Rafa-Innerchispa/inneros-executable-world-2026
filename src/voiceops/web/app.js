@@ -61,16 +61,33 @@ let scriptProcessorNode = null;
 let silentGainNode = null;
 let recognition = null;
 
+function updateSiteStatusBanner() {
+  const banner = document.getElementById("alertMessage");
+  if (!banner) return;
+  const provider = typeof window.getVoiceProvider === "function" ? window.getVoiceProvider() : "boson";
+  const transport =
+    bosonTransportMode === "higgs_relay"
+      ? "Boson Higgs Realtime"
+      : provider === "browser_local"
+        ? "Browser STT/TTS"
+        : provider === "telephony"
+          ? "PBX telephony"
+          : provider;
+  banner.textContent = `GYE-Node-01 · telemetry polled live · voice route: ${transport} · press Start Live Voice`;
+  const routeChip = document.getElementById("activeProviderRoute");
+  if (routeChip) routeChip.textContent = `Route: ${transport}`;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initWaveform();
   loadSpeechVoices();
   const htrEl = document.getElementById("htrCounter");
   if (htrEl) htrEl.textContent = `+${currentHtrTotal.toFixed(1)}`;
-  fetchTelemetry();
+  fetchTelemetry().then(updateSiteStatusBanner);
   fetchBosonStatus();
-  fetchIntegrationsStatus();
+  fetchIntegrationsStatus().then(updateSiteStatusBanner);
   loadHaControls();
-  setAudioSource("BROWSER_TTS_FALLBACK");
+  setAudioSource("STANDBY");
 
   // Continuously poll live telemetry every 2 seconds for real-time sensor updates
   setInterval(fetchTelemetry, 2000);
@@ -84,8 +101,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("haDomainFilter")?.addEventListener("change", () => renderHaEntityOptions());
   document.getElementById("haControllableOnly")?.addEventListener("change", () => loadHaControls(false));
   document.getElementById("haEntitySelect")?.addEventListener("change", syncHaVerbOptions);
-  // AssemblyAI voice wired in assemblyai-voice.js (canonical product)
-  document.getElementById("stopMicBtn")?.addEventListener("click", stopLiveVoice);
+  // Voice controls wired in assemblyai-voice.js
   document.getElementById("sendManualBtn")?.addEventListener("click", sendManualUtterance);
   document.getElementById("manualInput")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendManualUtterance();
@@ -115,10 +131,18 @@ document.addEventListener("DOMContentLoaded", () => {
 function setAudioSource(source) {
   audioSource = source;
   const badge = document.getElementById("audioSourceBadge");
-  if (badge) {
-    badge.textContent = `AUDIO_SOURCE: ${source}`;
-    badge.className = source === "HIGGS" ? "badge-pill active" : "badge-pill";
-  }
+  if (!badge) return;
+  const labels = {
+    ASSEMBLYAI: "Voz: AssemblyAI",
+    LOCAL_QWEN: "Voz: Qwen local",
+    BOSON: "Voz: Boson",
+    HIGGS: "Voz: Boson",
+    STANDBY: "Voz: standby",
+    BROWSER_TTS_FALLBACK: "Voz: navegador",
+    SPEAKER: "Voz: reproduciendo",
+  };
+  badge.textContent = labels[source] || `Voz: ${String(source).toLowerCase()}`;
+  badge.className = source === "ASSEMBLYAI" || source === "HIGGS" ? "header-status-chip active" : "header-status-chip";
 }
 
 function clearAgentAudioFallbackTimer() {
@@ -176,20 +200,21 @@ function loadSpeechVoices() {
   });
 }
 
-function pickEnglishVoice(voices) {
+function pickSpanishVoice(voices) {
   if (!voices || voices.length === 0) return null;
-  const preferred = ["google us english", "microsoft david", "microsoft mark", "microsoft aria", "english united states", "en-us"];
+  const preferred = ["helena", "sabina", "paulina", "español", "spanish", "es-ec", "es-mx", "es-es"];
   const lowerNames = voices.map((v) => `${v.name} ${v.lang}`.toLowerCase());
   for (const hint of preferred) {
     const idx = lowerNames.findIndex((n) => n.includes(hint));
     if (idx >= 0) return voices[idx];
   }
-  return voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("en")) || voices[0];
+  return voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("es")) || voices[0];
 }
 
 // Browser speechSynthesis — guaranteed audible output for agent replies.
 async function speakText(text, options = {}) {
   if (!text || !window.speechSynthesis) return;
+  if (window.telephonyCallActive) return;
   if (bosonTransportMode === "higgs_relay" && options.fallback !== true) {
     return;
   }
@@ -210,9 +235,9 @@ async function speakText(text, options = {}) {
 
       const voices = await loadSpeechVoices();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      const enVoice = pickEnglishVoice(voices);
-      if (enVoice) utterance.voice = enVoice;
+      utterance.lang = "es-EC";
+      const esVoice = pickSpanishVoice(voices);
+      if (esVoice) utterance.voice = esVoice;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
@@ -264,7 +289,7 @@ function initSpeechRecognition() {
   const rec = new SpeechRec();
   rec.continuous = true;
   rec.interimResults = false;
-  rec.lang = "en-US";
+  rec.lang = "es-EC";
 
   rec.onresult = (event) => {
     if (approvalInFlight) return;
@@ -331,7 +356,7 @@ async function initBosonSession() {
 
     if (bosonTransportMode === "browser_fallback" || !data.token || !data.ws_url || legacyFakeToken) {
       bosonTransportMode = "browser_fallback";
-      setAudioSource("BROWSER_TTS_FALLBACK");
+      setAudioSource("STANDBY");
       updateBosonVoiceBadge(null, "browser_fallback");
       appendChat("system", data.label || "BROWSER TTS FALLBACK — using browser SpeechRecognition + speechSynthesis.");
       setExecutionStep("Browser Voice Fallback", data.reason || "Boson relay not configured on server.");
@@ -371,7 +396,7 @@ async function initBosonSession() {
         console.log("Higgs WebSocket connection closed");
         if (isVoiceActive && bosonTransportMode === "higgs_relay") {
           bosonTransportMode = "browser_fallback";
-          setAudioSource("BROWSER_TTS_FALLBACK");
+          setAudioSource("STANDBY");
           updateBosonVoiceBadge(null, "browser_fallback");
           appendChat("system", "Higgs relay closed — falling back to browser STT/TTS.");
         }
@@ -380,7 +405,7 @@ async function initBosonSession() {
       setTimeout(() => {
         if (higgsWebSocket && higgsWebSocket.readyState !== WebSocket.OPEN) {
           bosonTransportMode = "browser_fallback";
-          setAudioSource("BROWSER_TTS_FALLBACK");
+          setAudioSource("STANDBY");
           updateBosonVoiceBadge(null, "browser_fallback");
           resolve(false);
         }
@@ -388,7 +413,7 @@ async function initBosonSession() {
     });
   } catch (err) {
     bosonTransportMode = "browser_fallback";
-    setAudioSource("BROWSER_TTS_FALLBACK");
+    setAudioSource("STANDBY");
     updateBosonVoiceBadge(null, "browser_fallback");
     console.warn("Ephemeral token negotiation notice:", err);
     return false;
@@ -451,7 +476,7 @@ function handleHiggsServerEvent(event) {
   } else if (type === "response.output_audio.delta" || type === "response.audio.delta") {
     // Boson Realtime streams 24 kHz PCM16 mono (response.output_audio.delta)
     const base64Audio = event.delta || "";
-    if (base64Audio && !(bosonTransportMode === "higgs_relay" && isVoiceActive)) {
+    if (base64Audio && bosonTransportMode === "higgs_relay") {
       if (!higgsPcmActive) {
         agentSpeakStartedAt = Date.now();
         pauseRecognition();
@@ -469,6 +494,14 @@ function handleHiggsServerEvent(event) {
   ) {
     higgsPcmActive = false;
     markAgentPlaybackEnding();
+  } else if (
+    type === "conversation.item.input_audio_transcription.completed" ||
+    type === "input_audio_transcription.completed"
+  ) {
+    const transcript = event.transcript || event.item?.content?.[0]?.transcript || "";
+    if (transcript.trim()) {
+      appendChat("user", transcript.trim());
+    }
   } else if (type === "voiceops.tool_executed") {
     handleVoiceopsToolExecuted(event);
   } else if (type === "error" && event.mode === "browser_fallback") {
@@ -526,14 +559,17 @@ function setApprovalButtonsEnabled(enabled) {
 function closeProposalUI(message, variant = "rejected") {
   activeProposalId = null;
   setApprovalButtonsEnabled(true);
-  document.getElementById("manualApprovalActions").style.display = "none";
+  const manualActions = document.getElementById("manualApprovalActions");
+  if (manualActions) manualActions.style.display = "none";
   const badge = document.getElementById("approvalBadge");
-  if (variant === "executed") {
-    badge.textContent = "PERMIT ISSUED";
-    badge.className = "status-badge active";
-  } else {
-    badge.textContent = "REJECTED — NO CHANGE";
-    badge.className = "status-badge";
+  if (badge) {
+    if (variant === "executed") {
+      badge.textContent = "PERMIT ISSUED";
+      badge.className = "status-badge active";
+    } else {
+      badge.textContent = "REJECTED — NO CHANGE";
+      badge.className = "status-badge";
+    }
   }
   const card = document.getElementById("proposalCard");
   if (card && message) {
@@ -650,9 +686,6 @@ function flushHiggsPcmQueue() {
 
 // Web Audio API: schedule PCM16 chunks back-to-back (fixes choppy/overlap playback)
 async function playPCM16AudioChunk(base64Data, sampleRate = HIGGS_SAMPLE_RATE) {
-  if (bosonTransportMode === "higgs_relay" && isVoiceActive) {
-    return;
-  }
   ensurePlaybackGraph();
   if (playbackContext.state === "suspended") {
     await playbackContext.resume();
@@ -679,6 +712,41 @@ function cancelAllAudioPlayback() {
   isAudioSpeaking = false;
   document.getElementById("audioPlayingTag")?.classList.add("hidden");
   if (!isVoiceActive) document.getElementById("voiceOrb")?.classList.remove("active");
+}
+
+function pcm16ToBase64(pcm16) {
+  const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function resampleFloat32(input, inRate, outRate) {
+  if (inRate === outRate) return input;
+  const ratio = inRate / outRate;
+  const outLen = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    out[i] = input[Math.min(input.length - 1, Math.floor(i * ratio))] || 0;
+  }
+  return out;
+}
+
+function streamMicChunkToHiggs(float32Samples) {
+  if (bosonTransportMode !== "higgs_relay") return;
+  if (!higgsWebSocket || higgsWebSocket.readyState !== WebSocket.OPEN) return;
+  const resampled = resampleFloat32(float32Samples, audioContext.sampleRate, HIGGS_SAMPLE_RATE);
+  const pcm16 = new Int16Array(resampled.length);
+  for (let i = 0; i < resampled.length; i++) {
+    const s = Math.max(-1, Math.min(1, resampled[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  higgsWebSocket.send(
+    JSON.stringify({
+      type: "input_audio_buffer.append",
+      audio: pcm16ToBase64(pcm16),
+    })
+  );
 }
 
 // Trigger Instant Barge-In (<50ms)
@@ -729,60 +797,78 @@ async function startLiveVoice() {
       if (!isVoiceActive) return;
       const inputData = e.inputBuffer.getChannelData(0);
       let sum = 0;
-      const pcm16 = new Int16Array(inputData.length);
       for (let i = 0; i < inputData.length; i++) {
-        const s = Math.max(-1, Math.min(1, inputData[i]));
-        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         sum += Math.abs(inputData[i]);
       }
       const avg = sum / inputData.length;
 
-      if (Date.now() < ttsBargeInGuardUntil) {
+      if (bosonTransportMode === "higgs_relay") {
+        streamMicChunkToHiggs(inputData);
+        if (Date.now() < ttsBargeInGuardUntil) return;
+        if (isAgentAudioPlaying() && avg > BARGE_IN_VAD_THRESHOLD) {
+          bargeInHoldFrames += 1;
+          if (bargeInHoldFrames >= BARGE_IN_FRAMES_REQUIRED) {
+            triggerInstantBargeIn();
+            bargeInHoldFrames = 0;
+          }
+        } else {
+          bargeInHoldFrames = 0;
+        }
         return;
       }
+
+      if (Date.now() < ttsBargeInGuardUntil) return;
       if (audioSource === "BROWSER_TTS_FALLBACK" && avg > 0.12 && isAudioSpeaking) {
         triggerInstantBargeIn();
       }
     };
 
-    // Connect Boson transport before deciding STT path.
-    await initBosonSession();
+    const provider = typeof window.getVoiceProvider === "function" ? window.getVoiceProvider() : "boson";
+    const useBrowserLocal = provider === "browser_local";
+    bosonTransportMode = "browser_fallback";
+    setAudioSource("STANDBY");
 
-    // Browser STT captures utterance; higgs_relay sends text to Boson WS for real S2S audio output.
-    if (!recognition) {
-      recognition = initSpeechRecognition();
+    if (!useBrowserLocal && provider === "boson") {
+      await initBosonSession();
     }
+
     if (bosonTransportMode !== "higgs_relay") {
       bosonTransportMode = "browser_fallback";
       setAudioSource("BROWSER_TTS_FALLBACK");
-    }
-    if (recognition) {
-      try {
-        recognition.start();
-      } catch (e) {}
+      if (!recognition) recognition = initSpeechRecognition();
+      if (recognition) {
+        try {
+          recognition.start();
+        } catch (err) {
+          console.warn("Speech recognition start:", err);
+        }
+      }
     }
 
     isVoiceActive = true;
     document.getElementById("liveMicBtn").disabled = true;
     document.getElementById("stopMicBtn").disabled = false;
     document.getElementById("voiceOrb").className = "voice-orb active";
-    document.getElementById("agentStateTitle").textContent = "Higgs Realtime Listening...";
-    document.getElementById("agentStateSubtitle").textContent = "PCM16 Audio Streaming · Web Audio Buffer & Sub-50ms Barge-in Active";
-    document.getElementById("turnStatus").textContent = "Streaming Live Audio";
+    document.getElementById("turnStatus").textContent = "En vivo";
     document.getElementById("turnStatus").className = "status-badge active";
 
-    setExecutionStep("Microphone Live", "Speak in English — ask about solar, network, cameras, or site status.");
     if (bosonTransportMode === "higgs_relay") {
-      appendChat(
-        "system",
-        "Boson Higgs Realtime live — speak in English. Voice replies use Boson audio; panel data via live tools."
-      );
+      document.getElementById("agentStateTitle").textContent = "Boson Higgs listening";
+      document.getElementById("agentStateSubtitle").textContent =
+        "Realtime S2S · server_vad · governed tools on server";
+      setExecutionStep("Higgs Realtime", "Speak naturally — greetings and ops queries go to Boson.");
+      appendChat("system", "Boson Higgs Realtime connected — mic PCM streaming to server relay.");
     } else {
-      appendChat("system", "Browser STT/TTS fallback active — Boson relay unavailable.");
-      const greetingText = "Hi, I'm here to help you. VoiceOps is online and monitoring all Guayaquil systems.";
+      document.getElementById("agentStateTitle").textContent = "Browser voice listening";
+      document.getElementById("agentStateSubtitle").textContent =
+        "Browser STT/TTS fallback · InnerOS tools via /api/boson/converse";
+      setExecutionStep("Browser voice", "Speak — server reasoning with browser TTS output.");
+      appendChat("system", "BROWSER TTS FALLBACK — SpeechRecognition + speechSynthesis (not Boson S2S).");
+      const greetingText = "InnerOS ready. Monitoring Guayaquil systems. How can I help?";
       appendChat("agent", greetingText);
       await speakText(greetingText, { fallback: true });
     }
+    updateSiteStatusBanner();
   } catch (err) {
     console.error("Microphone access error:", err);
     alert("Microphone permission was not granted. Please allow microphone access in your browser to test live speech.");
@@ -791,10 +877,16 @@ async function startLiveVoice() {
 }
 
 // Stop Live Voice Session
-function stopLiveVoice() {
+function stopLiveVoice(options = {}) {
   isVoiceActive = false;
   approvalInFlight = false;
   recognitionPaused = false;
+
+  const liveBtn = document.getElementById("liveMicBtn");
+  const stopBtn = document.getElementById("stopMicBtn");
+  if (liveBtn) liveBtn.disabled = false;
+  if (stopBtn) stopBtn.disabled = true;
+
   cancelAllAudioPlayback();
   setApprovalButtonsEnabled(true);
 
@@ -823,63 +915,89 @@ function stopLiveVoice() {
     higgsWebSocket = null;
   }
 
-  document.getElementById("liveMicBtn").disabled = false;
-  document.getElementById("stopMicBtn").disabled = true;
   document.getElementById("voiceOrb").className = "voice-orb idle";
-  document.getElementById("agentStateTitle").textContent = "Higgs Realtime Voice Dispatcher";
-  document.getElementById("agentStateSubtitle").textContent = "Continuous Speech-to-Speech with <=125ms Barge-in & Mid-Conversation Tool Calling";
-  document.getElementById("turnStatus").textContent = "Standby / Ready";
+  document.getElementById("agentStateTitle").textContent = "InnerOS Voice Dispatcher";
+  document.getElementById("agentStateSubtitle").textContent = "Voz continua con barge-in y herramientas gobernadas";
+  document.getElementById("turnStatus").textContent = "Listo";
   document.getElementById("turnStatus").className = "status-badge";
 
-  setExecutionStep("System Ready", "Awaiting voice or simulated judge scenario.");
-  appendChat("system", "Live voice session closed.");
+  setExecutionStep("Sistema listo", "Esperando voz o instrucción manual.");
+  if (!options.quiet) {
+    appendChat("system", "Sesión de voz finalizada.");
+  }
 }
 
-// Process spoken/typed command — reliable panel data via /api/boson/converse, voice via Boson PCM + TTS fallback.
+function forceStopAllVoice(options = {}) {
+  if (typeof window.stopAssemblyAIVoice === "function") {
+    window.stopAssemblyAIVoice();
+  }
+  stopLiveVoice({ quiet: true, ...options });
+}
+
+// Una sola voz por turno: HTTP gobernado + TTS (evita Boson PCM + navegador a la vez).
+async function processSpokenCommandHttp(text, options = {}) {
+  const t0 = performance.now();
+  const res = await fetch("/api/boson/converse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ utterance: text, active_proposal_id: activeProposalId }),
+  });
+  const data = await res.json();
+  const latMs = Math.round(performance.now() - t0);
+
+  if (data.tool_records && data.tool_records.length > 0) {
+    data.tool_records.forEach((rec) => {
+      recordToolCall(rec.tool_name, rec.arguments, rec.output, latMs);
+    });
+    fetchTelemetry();
+  }
+
+  if (data.proposal) {
+    activeProposalId = data.proposal.proposal_id;
+    showProposalCard(activeProposalId, data.proposal.summary, data.subsystem);
+  }
+
+  if (data.approval_result) {
+    handleApprovalExecution(data.approval_result);
+  }
+
+  const reply = data.reply || "Consulta procesada.";
+  if (data.subsystem) {
+    highlightDashboardCard(data.subsystem);
+  }
+
+  if (options.appendChat !== false) {
+    appendChat("agent", reply);
+    window.__agentReplyAppended = true;
+  }
+
+  if (options.speak !== false) {
+    cancelAllAudioPlayback();
+    await speakText(reply, { fallback: true });
+  }
+
+  if (isVoiceActive) resumeRecognition();
+  fetchIntegrationsStatus();
+  return data;
+}
+
 async function processSpokenCommand(text) {
+  if (bosonTransportMode === "higgs_relay") {
+    return sendUtteranceToHiggs(text);
+  }
+
   if (isAgentAudioPlaying()) {
     triggerInstantBargeIn();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
 
   setExecutionStep("VoiceOps Reasoning", `"${text.slice(0, 40)}..."`);
 
   try {
-    const t0 = performance.now();
-    const res = await fetch("/api/boson/converse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ utterance: text, active_proposal_id: activeProposalId }),
-    });
-    const data = await res.json();
-    const latMs = Math.round(performance.now() - t0);
-
-    if (data.tool_records && data.tool_records.length > 0) {
-      data.tool_records.forEach((rec) => {
-        recordToolCall(rec.tool_name, rec.arguments, rec.output, latMs);
-      });
-      fetchTelemetry();
-    }
-
-    if (data.proposal) {
-      activeProposalId = data.proposal.proposal_id;
-      showProposalCard(activeProposalId, data.proposal.summary, data.subsystem);
-    }
-
-    if (data.approval_result) {
-      handleApprovalExecution(data.approval_result);
-    }
-
-    const reply = data.reply || "Operational query processed.";
-    if (data.subsystem) {
-      highlightDashboardCard(data.subsystem);
-    }
-
-    await speakAgentReply(reply);
-    fetchIntegrationsStatus();
+    await processSpokenCommandHttp(text);
   } catch (err) {
     console.error("Converse error:", err);
-    appendChat("system", "Request failed — check server connection.");
+    appendChat("system", "Error de conexión con el servidor.");
   }
 }
 
@@ -955,7 +1073,7 @@ async function fetchTelemetry() {
     const syncTime = document.getElementById("telemetrySyncTime");
     if (syncTime) {
       const now = new Date();
-      syncTime.textContent = `Streaming GYE Node-01 · ${now.toLocaleTimeString()} · 18ms`;
+      syncTime.textContent = `Polled GYE Node-01 · ${now.toLocaleTimeString()}`;
     }
 
     function updateTruthBadge(elementId, truth) {
@@ -971,6 +1089,8 @@ async function fetchTelemetry() {
       if (sub.solar_power) {
         const sol = sub.solar_power;
         updateTruthBadge("solTruth", sol.truth);
+        const solStatus = document.getElementById("solStatus");
+        if (solStatus) solStatus.textContent = sol.status || "—";
         const solGen = document.getElementById("solGen");
         const solBat = document.getElementById("solBat");
         const solGrid = document.getElementById("solGrid");
@@ -991,14 +1111,24 @@ async function fetchTelemetry() {
       if (sub.telephony) {
         const tel = sub.telephony;
         updateTruthBadge("telTruth", tel.truth);
+        const telStatus = document.getElementById("telStatus");
+        if (telStatus) telStatus.textContent = tel.status || "—";
         const telExts = document.getElementById("telExts");
         const telQuality = document.getElementById("telQuality");
-        if (telExts && tel.registered_extensions) {
-          const extList = tel.registered_extensions.map((e) => e.ext).join(", ");
-          telExts.textContent = `${tel.registered_extensions.length} Registered (${extList})`;
+        const exts = tel.registered_extensions || [];
+        if (telExts) {
+          if (exts.length) {
+            const extList = exts.map((e) => e.ext).join(", ");
+            telExts.textContent = `${exts.length} registered (${extList})`;
+          } else {
+            telExts.textContent = tel.ami_error ? `AMI unavailable (${tel.ami_error})` : "0 registered (AMI poll)";
+          }
         }
-        if (telQuality && tel.trunk_quality) {
-          telQuality.textContent = `Jitter ${tel.trunk_quality.jitter_ms || 2.1}ms (MOS ${tel.trunk_quality.mos_score || 4.38})`;
+        if (telQuality) {
+          telQuality.textContent =
+            tel.trunk_quality && tel.truth === "LIVE"
+              ? `Jitter ${tel.trunk_quality.jitter_ms}ms (MOS ${tel.trunk_quality.mos_score})`
+              : "—";
         }
       }
 
@@ -1006,15 +1136,33 @@ async function fetchTelemetry() {
       if (sub.network_wifi) {
         const net = sub.network_wifi;
         updateTruthBadge("netTruth", net.truth);
+        const netStatus = document.getElementById("netStatus");
+        if (netStatus) netStatus.textContent = net.status || "—";
         const netWan = document.getElementById("netWan");
         const netLoss = document.getElementById("netLoss");
-        if (netWan && net.wan_status) {
-          netWan.textContent = `${net.wan_status.bandwidth_gbps || 1.0} Gbps (RTT ${net.wan_status.latency_ms || 3.8}ms)`;
+        const netSwitch = document.getElementById("netSwitch");
+        if (netWan) {
+          netWan.textContent =
+            net.unifi_wan_status != null
+              ? `WAN ${net.unifi_wan_status}${net.unifi_cpu_utilization_pct != null ? ` · CPU ${net.unifi_cpu_utilization_pct}%` : ""}`
+              : "—";
         }
-        if (netLoss && net.access_points) {
-          const yard = net.access_points.find((ap) => ap.ap_id.includes("SolarYard")) || net.access_points[0];
-          netLoss.textContent = `${yard.packet_loss_pct || 0.0}% Packet Loss`;
-          netLoss.className = (yard.packet_loss_pct || 0.0) > 5 ? "text-danger" : "text-success";
+        if (netLoss) {
+          const yard = (net.access_points || []).find((ap) => String(ap.ap_id || "").includes("SolarYard"));
+          if (yard && yard.status) {
+            netLoss.textContent = yard.status;
+            netLoss.className = String(yard.status).includes("DEGRADED") ? "text-danger" : "text-success";
+          } else {
+            netLoss.textContent = "—";
+            netLoss.className = "";
+          }
+        }
+        if (netSwitch) {
+          netSwitch.textContent = net.core_switch || "—";
+        }
+        const cardNetwork = document.getElementById("cardNetwork");
+        if (cardNetwork) {
+          cardNetwork.classList.toggle("alert", String(net.status || "").includes("ALERT"));
         }
       }
 
@@ -1022,18 +1170,37 @@ async function fetchTelemetry() {
       if (sub.security_alarm) {
         const alm = sub.security_alarm;
         updateTruthBadge("alarmTruth", alm.truth);
+        const alarmStatus = document.getElementById("alarmStatus");
+        if (alarmStatus) alarmStatus.textContent = alm.status || "—";
         const almZones = document.getElementById("alarmZones");
-        if (almZones) almZones.textContent = `${alm.monitored_zones_count || 10} Zones Monitored`;
+        if (almZones) almZones.textContent = `${alm.monitored_zones_count || 0} zones monitored`;
+        const alarmTrigger = document.getElementById("alarmTrigger");
+        if (alarmTrigger) {
+          alarmTrigger.textContent = alm.is_in_alarm ? "IN ALARM" : alm.is_triggered ? "TRIGGERED" : "NORMAL";
+        }
       }
 
       // 5. Video Surveillance Subsystem
       if (sub.video_surveillance) {
         const cam = sub.video_surveillance;
         updateTruthBadge("camTruth", cam.truth);
+        const camStatus = document.getElementById("camStatus");
+        if (camStatus) camStatus.textContent = cam.status || "—";
         const camChannels = document.getElementById("camChannels");
-        if (camChannels && cam.channels) {
-          camChannels.textContent = cam.channels.map((c) => `${c.channel} ${c.alias}`).join(" · ");
+        if (camChannels) {
+          camChannels.textContent =
+            cam.channels && cam.channels.length
+              ? cam.channels.map((c) => `${c.channel} ${c.alias}`).join(" · ")
+              : cam.note || "—";
         }
+        const camMotion = document.getElementById("camMotion");
+        if (camMotion) camMotion.textContent = cam.event_dispatcher || cam.note || "—";
+        const camNvr = document.getElementById("camNvr");
+        if (camNvr) camNvr.textContent = cam.nvr_host || "—";
+      }
+
+      if (sub.dmx_lighting) {
+        updateTruthBadge("dmxTruth", sub.dmx_lighting.truth);
       }
     }
   } catch (err) {
@@ -1050,7 +1217,7 @@ async function fetchBosonStatus() {
     console.log("Boson AI Higgs Realtime Status:", data);
     updateBosonVoiceBadge(data.voice || "default", data.mode || "browser_fallback");
     if (data.mode === "browser_fallback") {
-      setAudioSource("BROWSER_TTS_FALLBACK");
+      setAudioSource("STANDBY");
     }
   } catch (err) {
     console.error("Boson status check error:", err);
@@ -1312,10 +1479,13 @@ async function loadHaControls(forceRefresh = false) {
     truthEl.className = "status-badge pending";
   }
   try {
-    const params = new URLSearchParams({ limit: "2000" });
+    const params = new URLSearchParams({ limit: search ? "500" : "250" });
     if (search) params.set("q", search);
     if (controllableOnly) params.set("controllable_only", "true");
-    const res = await fetch(`/api/ha/controls?${params.toString()}`);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45000);
+    const res = await fetch(`/api/ha/controls?${params.toString()}`, { signal: controller.signal });
+    window.clearTimeout(timeout);
     const data = await res.json();
     haControlsCache = Array.isArray(data.entities) ? data.entities : [];
     haDomainCounts = data.domain_counts || {};
@@ -1332,10 +1502,17 @@ async function loadHaControls(forceRefresh = false) {
   } catch (err) {
     console.error("HA controls load failed:", err);
     if (truthEl) {
-      truthEl.textContent = "ERROR";
+      truthEl.textContent = err.name === "AbortError" ? "TIMEOUT" : "ERROR";
       truthEl.className = "status-badge fallback";
     }
-    if (countEl) countEl.textContent = "No se pudo cargar inventario HA";
+    if (countEl) {
+      countEl.textContent =
+        err.name === "AbortError"
+          ? "Inventario HA lento — pulsa ↻ Actualizar inventario"
+          : "No se pudo cargar inventario HA";
+    }
+    const select = document.getElementById("haEntitySelect");
+    if (select) select.innerHTML = `<option value="">Error cargando — reintentar</option>`;
   }
 }
 
@@ -1459,18 +1636,21 @@ function showProposalCard(proposalId, summary, subsystem) {
     <div style="font-size:12px; color:#1e293b; margin-bottom:6px;">${summary}</div>
     <div style="font-size:11px; color:#64748b;">Requires explicit verbal confirmation from the human operator.</div>
   `;
-  document.getElementById("manualApprovalActions").style.display = "flex";
+  const manualActions = document.getElementById("manualApprovalActions");
+  if (manualActions) manualActions.style.display = "flex";
   setApprovalButtonsEnabled(true);
 }
 
 // Record Tool Call in Ticker
 function recordToolCall(name, args, output, latencyMs) {
   const stream = document.getElementById("toolStream");
+  if (!stream) return;
   if (stream.querySelector(".empty")) {
     stream.innerHTML = "";
   }
 
-  document.getElementById("toolLatency").textContent = `${latencyMs} ms`;
+  const latencyEl = document.getElementById("toolLatency");
+  if (latencyEl) latencyEl.textContent = `${latencyMs} ms`;
 
   const item = document.createElement("div");
   item.className = "tool-item";
@@ -1481,18 +1661,46 @@ function recordToolCall(name, args, output, latencyMs) {
   stream.prepend(item);
 }
 
+let lastChatEntry = { role: "", text: "", at: 0 };
+
+function agentChatLabel() {
+  const provider = typeof window.getVoiceProvider === "function" ? window.getVoiceProvider() : "boson";
+  if (provider === "telephony") return "INNEROS · Phone agent";
+  const labels = {
+    assemblyai: "INNEROS · AssemblyAI",
+    boson: "INNEROS · Boson",
+    browser_local: "INNEROS · Browser",
+  };
+  return labels[provider] || "INNEROS AGENT";
+}
+
 // Append Chat Message
 function appendChat(role, text) {
   const box = document.getElementById("transcriptBox");
+  if (!box) return;
+  const normalized = String(text || "").trim();
+  if (!normalized) return;
+  const now = Date.now();
+  if (lastChatEntry.role === role && lastChatEntry.text === normalized && now - lastChatEntry.at < 2500) {
+    return;
+  }
+  lastChatEntry = { role, text: normalized, at: now };
+
+  const placeholder = box.querySelector(".chat-bubble.system p");
+  if (box.children.length === 1 && placeholder && placeholder.textContent.includes("InnerOS Executable World listo")) {
+    box.innerHTML = "";
+  }
+
   const bubble = document.createElement("div");
   bubble.className = `chat-bubble ${role}`;
 
   const meta = document.createElement("span");
   meta.className = "bubble-meta";
-  meta.textContent = role === "user" ? "OPERATOR (GUAYAQUIL)" : role === "agent" ? "HIGGS REALTIME (S2S)" : "SYSTEM";
+  meta.textContent =
+    role === "user" ? "OPERADOR (GUAYAQUIL)" : role === "agent" ? agentChatLabel() : "SISTEMA";
 
   const p = document.createElement("p");
-  p.textContent = text;
+  p.textContent = normalized;
 
   bubble.appendChild(meta);
   bubble.appendChild(p);
@@ -1594,3 +1802,31 @@ function initWaveform() {
   }
   draw();
 }
+
+async function unlockAudioOutput() {
+  ensurePlaybackGraph();
+  if (playbackContext && playbackContext.state === "suspended") {
+    await playbackContext.resume();
+  }
+  if (audioContext && audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+  if (window.speechSynthesis && window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
+  }
+}
+
+window.startBosonVoice = startLiveVoice;
+window.stopBosonVoice = stopLiveVoice;
+window.forceStopAllVoice = forceStopAllVoice;
+window.appendChat = appendChat;
+window.refreshGovernedState = fetchIntegrationsStatus;
+window.unlockAudioOutput = unlockAudioOutput;
+window.speakText = speakText;
+
+async function testAudioOutput() {
+  await unlockAudioOutput();
+  appendChat("system", "Prueba de audio: deberías oír esta frase.");
+  await speakText("Prueba de audio InnerOS VoiceOps. Si escuchas esto, el altavoz funciona correctamente.", { fallback: true });
+}
+window.testAudioOutput = testAudioOutput;

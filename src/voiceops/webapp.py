@@ -279,6 +279,87 @@ def mint_voice_agent_token(
     return {"token": token, "expires_in_seconds": expires_in_seconds}
 
 
+def _telephony_plan(payload: dict[str, Any], *, dial: bool) -> dict[str, Any]:
+    from .governed_tools import get_operational_registry
+    from .telephony_policy import authorize_call
+
+    target = str(
+        payload.get("target") or payload.get("extension") or os.getenv("VOICEOPS_TELEPHONY_DEFAULT_EXTENSION", "1004")
+    ).strip()
+    mobile = str(payload.get("mobile") or "").strip()
+    decision = authorize_call(target, explicit_user_request=True, route_verified=dial)
+    pbx_host = os.getenv("VOICEOPS_TELEPHONY_AMI_HOST", "192.168.1.6")
+    sip_port = os.getenv("VOICEOPS_TELEPHONY_SIP_PORT", "4321")
+    originate_enabled = _env_truthy("VOICEOPS_TELEPHONY_ORIGINATE_ENABLED")
+
+    steps = [
+        f"Central UCM6104 en {pbx_host} (SIP UDP {sip_port}, AMI TCP 7777).",
+        f"Extensión objetivo: {target} (VoiceOps / Zoiper).",
+    ]
+    if mobile:
+        steps.append(f"Desde celular {mobile}: marca ext. {target} vía PBX o usa Zoiper registrado.")
+    else:
+        steps.append(f"Registra Zoiper como ext. {target} o llama a esa extensión desde el PBX.")
+
+    peer_status: str | None = None
+    originate_result: dict[str, Any] | None = None
+
+    try:
+        from .adapters.grandstream_ami import GrandstreamAMIAdapter
+
+        ami = GrandstreamAMIAdapter()
+        peer = ami.extension_status(target)
+        peer_status = peer.get("Status") or peer.get("Message") or "peer consultado"
+        steps.append(f"Estado SIP ext. {target}: {peer_status}")
+    except Exception as exc:
+        peer_status = f"no disponible ({type(exc).__name__}: {exc})"
+        steps.append(f"AMI lectura: {peer_status}")
+
+    reg = get_operational_registry()
+    reg.register_extension(ext=target, label="VoiceOps panel dial", status="DIALING" if dial else "ONLINE")
+
+    if dial and originate_enabled and decision.allowed:
+        try:
+            from .adapters.grandstream_ami import GrandstreamAMIAdapter
+
+            ami = GrandstreamAMIAdapter()
+            originate_result = ami.originate_internal_extension(target)
+            steps.append(f"Originate enviado: {originate_result.get('Message', 'OK')}")
+        except Exception as exc:
+            originate_result = {"ok": False, "message": str(exc)}
+            steps.append(f"Originate no ejecutado: {exc}")
+    elif dial:
+        steps.append(
+            "Para timbrar automáticamente: VOICEOPS_TELEPHONY_ORIGINATE_ENABLED=true + credenciales AMI en el servidor."
+        )
+
+    steps.append(
+        "Puente RTP→agente de voz en roadmap. Mientras tanto usa micrófono web (Boson/AssemblyAI) con tools HA."
+    )
+
+    return {
+        "ok": decision.allowed,
+        "target": target,
+        "mobile": mobile or None,
+        "dial_attempted": dial,
+        "decision": {
+            "allowed": decision.allowed,
+            "destination_class": decision.destination_class.value,
+            "execution_ready": decision.execution_ready or (dial and originate_enabled),
+            "reason": decision.reason,
+        },
+        "pbx_host": pbx_host,
+        "sip_port": sip_port,
+        "peer_status": peer_status,
+        "originate_enabled": originate_enabled,
+        "originate_result": originate_result,
+        "registered_extension": target,
+        "all_extensions": list(reg._registered_extensions),
+        "steps": steps,
+        "note": "Marcación AMI activa solo con VOICEOPS_TELEPHONY_ORIGINATE_ENABLED=true.",
+    }
+
+
 class VoiceOpsHandler(BaseHTTPRequestHandler):
     server_version = "VoiceOpsDemo/0.3"
 
@@ -303,6 +384,16 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         route = self._route_path()
+        if route == "/api/telephony/call-session":
+            from .adapters.telephony_agent_bridge import get_call_session_snapshot
+
+            self._send_json(get_call_session_snapshot())
+            return
+        if route == "/api/telephony/providers":
+            from .adapters.telephony_agent_bridge import get_telephony_provider_status
+
+            self._send_json(get_telephony_provider_status())
+            return
         if route == "/healthz":
             self._send_json(
                 {
@@ -310,9 +401,67 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
                     "service": "inneros-voiceops",
                     "live_voice_enabled": bool(self.server.live_voice_enabled),  # type: ignore[attr-defined]
                     "credential_configured": bool(os.getenv("ASSEMBLYAI_API_KEY")),
+                    "boson_configured": bool(os.getenv("BOSON_API_KEY") or os.getenv("HIGGS_API_KEY")),
                     "guardian_voice_bridge_enabled": bool(self.server.bridge_token) or self._loopback_bridge_allowed(),  # type: ignore[attr-defined]
                     "guardian_voice_bridge_mode": "token" if self.server.bridge_token else ("loopback_only" if self._loopback_bridge_allowed() else "disabled"),  # type: ignore[attr-defined]
                     "production_writes": False,
+                }
+            )
+            return
+        if route == "/ws/higgs":
+            self._handle_ws_higgs()
+            return
+        if route == "/api/boson/token":
+            from .adapters.boson_realtime import (
+                BOSON_OUTPUT_SAMPLE_RATE,
+                issue_relay_token,
+                probe_boson_ready,
+            )
+
+            probe = probe_boson_ready()
+            if not probe.get("ok"):
+                self._send_json(
+                    {
+                        "mode": "browser_fallback",
+                        "transport": "browser_stt_tts",
+                        "label": "BROWSER TTS FALLBACK",
+                        "ready": True,
+                        "ws_url": None,
+                        "sample_rate": BOSON_OUTPUT_SAMPLE_RATE,
+                        "reason": probe.get("error", "Boson not configured"),
+                    }
+                )
+                return
+            relay_token = issue_relay_token()
+            self._send_json(
+                {
+                    "mode": "higgs_relay",
+                    "token": relay_token,
+                    "expires_in_seconds": 600,
+                    "ws_url": "/ws/higgs",
+                    "model": "higgs-realtime",
+                    "voice": "default",
+                    "sample_rate": BOSON_OUTPUT_SAMPLE_RATE,
+                    "provider": "Boson AI Higgs Realtime Speech-to-Speech",
+                    "ready": True,
+                    "upstream": probe.get("ws_url"),
+                    "session_id": probe.get("session_id"),
+                }
+            )
+            return
+        if route == "/api/boson/status":
+            from .adapters.boson_realtime import boson_api_key
+
+            has_key = bool(boson_api_key())
+            self._send_json(
+                {
+                    "provider": "Boson AI Higgs Realtime S2S",
+                    "model": "higgs-realtime",
+                    "site": "Guayaquil Operations Hub (GYE-Node-01)",
+                    "ready": has_key,
+                    "mode": "higgs_relay" if has_key else "browser_fallback",
+                    "websocket_endpoint": "/ws/higgs" if has_key else None,
+                    "token_endpoint": "/api/boson/token",
                 }
             )
             return
@@ -324,7 +473,18 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
         if route == "/api/telemetry":
             from .governed_tools import inspect_operational_state
 
-            self._send_json(inspect_operational_state("all", live_fluctuation=True))
+            try:
+                self._send_json(inspect_operational_state("all", live_fluctuation=False))
+            except Exception as exc:
+                self._send_json(
+                    {
+                        "error": str(exc),
+                        "subsystem": "all",
+                        "truth": "UNVERIFIED",
+                        "subsystems": {},
+                    },
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
             return
         if route == "/api/ha/controls":
             from .governed_tools import list_home_assistant_controls
@@ -363,6 +523,7 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
             "/": ("index.html", "text/html; charset=utf-8"),
             "/app.js": ("app.js", "application/javascript; charset=utf-8"),
             "/assemblyai-voice.js": ("assemblyai-voice.js", "application/javascript; charset=utf-8"),
+            "/voice-router.js": ("voice-router.js", "application/javascript; charset=utf-8"),
             "/styles.css": ("styles.css", "text/css; charset=utf-8"),
         }
         item = static_map.get(route)
@@ -409,6 +570,29 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
                 reg = get_operational_registry()
                 self._send_json(reg.unregister_extension(ext=ext))
                 return
+            if route == "/api/telephony/prepare-call":
+                self._send_json(_telephony_plan(self._read_json(), dial=False))
+                return
+            if route == "/api/telephony/dial-extension":
+                self._send_json(_telephony_plan(self._read_json(), dial=True))
+                return
+            if route == "/api/telephony/agent-call":
+                from .adapters.telephony_agent_bridge import start_agent_call_async
+
+                payload = self._read_json()
+                target = str(
+                    payload.get("extension")
+                    or payload.get("target")
+                    or os.getenv("VOICEOPS_TELEPHONY_DEFAULT_EXTENSION", "1004")
+                ).strip()
+                provider = str(payload.get("voice_provider") or payload.get("provider") or "assemblyai").strip()
+                self._send_json(start_agent_call_async(target, voice_provider=provider))
+                return
+            if route == "/api/telephony/cancel-call":
+                from .adapters.telephony_agent_bridge import cancel_active_call
+
+                self._send_json(cancel_active_call())
+                return
             if route == "/api/governed/inspect":
                 from .governed_tools import inspect_operational_state
 
@@ -435,6 +619,18 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
                 return
             if route == "/api/reset":
                 self._send_json(self.store.reset())
+                return
+            if route == "/api/assemblyai/token":
+                self._handle_voice_agent_token()
+                return
+            if route == "/api/boson/converse":
+                from .adapters.higgs_realtime import HiggsRealtimeSession
+
+                payload = self._read_json()
+                utterance = str(payload.get("utterance") or "")
+                active_prop = payload.get("active_proposal_id")
+                session = HiggsRealtimeSession()
+                self._send_json(session.converse(user_utterance=utterance, active_proposal_id=active_prop))
                 return
             if route == "/api/intent":
                 payload = self._read_json()
@@ -512,6 +708,71 @@ class VoiceOpsHandler(BaseHTTPRequestHandler):
         self.server.last_token_issued_at = now  # type: ignore[attr-defined]
         self._send_json(token_payload)
 
+    def _handle_ws_higgs(self) -> None:
+        """RFC 6455 WebSocket relay to Boson Higgs Realtime upstream."""
+        from urllib.parse import parse_qs, urlparse
+
+        from .adapters.boson_realtime import boson_api_key, relay_browser_websocket, validate_relay_token
+        from .websocket_server import compute_accept_key, encode_ws_frame, read_ws_frame
+
+        sec_key = self.headers.get("Sec-WebSocket-Key", "")
+        if not sec_key:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Missing Sec-WebSocket-Key")
+            return
+
+        parsed = urlparse(self.path)
+        relay_token = parse_qs(parsed.query).get("token", [""])[0].strip()
+        if not relay_token or not validate_relay_token(relay_token):
+            if not boson_api_key():
+                self.send_error(HTTPStatus.UNAUTHORIZED, "Missing or expired Boson relay token")
+                return
+
+        accept_val = compute_accept_key(sec_key)
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept_val)
+        self.end_headers()
+
+        def read_frame() -> tuple[int, bytes] | None:
+            return read_ws_frame(self.rfile)
+
+        def write_frame(opcode: int, payload: bytes) -> None:
+            self.wfile.write(encode_ws_frame(opcode, payload))
+            self.wfile.flush()
+
+        def _notify_tool_event(tool_name: str, arguments: dict[str, Any], output: dict[str, Any]) -> None:
+            payload = json.dumps(
+                {
+                    "type": "voiceops.tool_executed",
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                    "output": output,
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+            write_frame(1, payload)
+
+        try:
+            relay_browser_websocket(
+                read_frame=read_frame,
+                write_frame=write_frame,
+                on_tool_event=_notify_tool_event,
+            )
+        except Exception as exc:
+            err = json.dumps(
+                {
+                    "type": "error",
+                    "mode": "browser_fallback",
+                    "message": str(exc),
+                }
+            ).encode("utf-8")
+            try:
+                write_frame(1, err)
+                write_frame(8, b"")
+            except Exception:
+                pass
+
     def _read_json(self) -> dict[str, Any]:
         raw_length = self.headers.get("Content-Length", "0")
         try:
@@ -584,6 +845,9 @@ def main() -> None:
         f"· live_assemblyai={args.enable_live_assemblyai}"
     )
     try:
+        from .adapters.telephony_sip_register import start_persistent_sip_registration
+
+        start_persistent_sip_registration()
         server.serve_forever()
     except KeyboardInterrupt:
         pass

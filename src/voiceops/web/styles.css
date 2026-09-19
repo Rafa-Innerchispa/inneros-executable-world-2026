@@ -739,11 +739,20 @@ body {
 }
 
 .chat-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   max-width: 85%;
   padding: 10px 14px;
   border-radius: var(--radius-md);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.chat-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-bubble.system {
@@ -757,6 +766,8 @@ body {
 
 .chat-bubble.user {
   align-self: flex-end;
+  align-items: flex-end;
+  text-align: right;
   background: var(--color-brand);
   color: var(--text-white);
   border-bottom-right-radius: 2px;
@@ -1290,98 +1301,413 @@ body {
   color: var(--text-secondary);
 }
 
-/* Canonical product theme — sober dark ops console */
-body.canonical-theme {
-  --bg-app: #0f1419;
-  --bg-card: #161b22;
-  --bg-panel-sub: #1c2128;
-  --border-light: #30363d;
-  --border-subtle: #21262d;
-  --border-focus: #388bfd;
+/* Executable World — light professional surface (white base) */
+body.executable-theme {
+  --bg-app: #ffffff;
+  --bg-card: #ffffff;
+  --bg-panel-sub: #f1f5f9;
+  --border-light: #e2e8f0;
+  --border-subtle: #cbd5e1;
+  --border-focus: #0284c7;
 
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #6e7681;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
 
-  --color-brand: #238636;
-  --color-brand-hover: #2ea043;
-  --color-brand-light: rgba(35, 134, 54, 0.12);
+  --color-brand: #0369a1;
+  --color-brand-hover: #0284c7;
+  --color-brand-light: #e0f2fe;
 
-  --color-success: #3fb950;
-  --color-warning: #d29922;
-  --color-danger: #f85149;
-  --color-info: #58a6ff;
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 16px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 12px 32px rgb(15 23 42 / 0.08);
+
+  background: var(--bg-app);
+  color: var(--text-primary);
 }
 
-body.canonical-theme .app-header {
-  background: linear-gradient(180deg, #161b22 0%, #0f1419 100%);
-  border-bottom-color: var(--border-light);
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(2, 132, 199, 0.07), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 100% 100%, rgba(5, 150, 105, 0.06), transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 45%, #f1f5f9 100%);
 }
 
-body.canonical-theme .alert-banner {
-  background: linear-gradient(90deg, rgba(35, 134, 54, 0.08) 0%, rgba(88, 166, 255, 0.06) 100%);
+.ambient-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.45;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.ambient-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.25;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+body.executable-theme .app-layout {
+  position: relative;
+  z-index: 1;
+}
+
+body.executable-theme .app-header {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  border-bottom: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+body.executable-theme .brand-title strong {
+  color: var(--color-brand);
+  font-weight: 700;
+}
+
+body.executable-theme .logo-icon {
+  color: var(--color-brand);
+  opacity: 0.9;
+}
+
+body.executable-theme .site-tag,
+body.executable-theme .model-badge {
+  background: var(--bg-panel-sub);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+body.executable-theme .header-status-chip {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel-sub);
+  letter-spacing: 0.02em;
+}
+
+body.executable-theme .status-strip {
+  display: flex;
+  align-items: center;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+body.executable-theme .status-strip-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+}
+
+body.executable-theme .alert-banner {
+  display: none;
+}
+
+body.executable-theme .card,
+body.executable-theme .panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-md);
+}
+
+body.executable-theme .voice-hero {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
   border-color: var(--border-light);
 }
 
-body.canonical-theme .voice-hero {
-  background: linear-gradient(135deg, #161b22 0%, #1a2332 100%);
+body.executable-theme .subsystem-card {
+  background: var(--bg-panel-sub);
+  border-color: var(--border-subtle);
+}
+
+body.executable-theme .subsystem-card.alert {
+  border-color: rgba(196, 163, 90, 0.25);
+  background: rgba(196, 163, 90, 0.06);
+}
+
+body.executable-theme .btn-primary {
+  background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
+  border-color: #0369a1;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+body.executable-theme .btn-primary:hover {
+  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+}
+
+body.executable-theme .btn-outline {
+  background: #ffffff;
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+body.executable-theme .btn-outline:hover {
+  background: var(--bg-panel-sub);
+  color: var(--text-primary);
+}
+
+body.executable-theme .btn-secondary {
+  background: var(--bg-panel-sub);
+  border-color: var(--border-light);
+  color: var(--text-secondary);
+}
+
+body.executable-theme .panel-header h3 {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+
+body.executable-theme .badge-live,
+body.executable-theme .badge-pill,
+body.executable-theme .truth-badge {
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+body.executable-theme .truth-badge.live {
+  background: rgba(107, 155, 122, 0.15);
+  color: var(--color-success);
+  border-color: rgba(107, 155, 122, 0.3);
+}
+
+body.executable-theme .transcript-box {
+  background: #f8fafc;
   border-color: var(--border-light);
 }
 
-body.canonical-theme .btn-primary {
-  background: var(--color-brand);
-  border-color: var(--color-brand);
+body.executable-theme .chat-bubble.system {
+  background: #f1f5f9;
+  border-color: var(--border-light);
 }
 
-body.canonical-theme .btn-primary:hover {
-  background: var(--color-brand-hover);
+body.executable-theme .tool-call-section {
+  border-color: var(--border-light);
+  background: #f8fafc;
 }
 
-body.canonical-theme .assemblyai-live-status {
+body.executable-theme .assemblyai-live-status {
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
   padding: 6px 10px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
-  background: var(--bg-panel-sub);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
 }
 
-body.canonical-theme .assemblyai-live-status.ready,
-body.canonical-theme .assemblyai-live-status.active {
+body.executable-theme .assemblyai-live-status.ready,
+body.executable-theme .assemblyai-live-status.active {
   color: var(--color-success);
-  border-color: rgba(63, 185, 80, 0.35);
+  border-color: rgba(107, 155, 122, 0.35);
 }
 
-body.canonical-theme .assemblyai-live-status.error {
+body.executable-theme .assemblyai-live-status.blocked,
+body.executable-theme .assemblyai-live-status.error {
   color: var(--color-danger);
-  border-color: rgba(248, 81, 73, 0.35);
+  border-color: rgba(193, 123, 123, 0.35);
 }
 
-body.canonical-theme .agent-transcript-box {
+body.executable-theme .live-voice-caption {
   font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  background: var(--bg-panel-sub);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 10px 12px;
-  min-height: 48px;
-  max-height: 120px;
-  overflow-y: auto;
-}
-
-body.canonical-theme .boson-voice-badge {
-  background: rgba(88, 166, 255, 0.1);
-  color: var(--color-info);
-  border-color: rgba(88, 166, 255, 0.25);
-}
-
-body.canonical-theme .partner-truth.not-connected {
-  background: rgba(110, 118, 129, 0.15);
+  line-height: 1.45;
   color: var(--text-muted);
+  background: #f8fafc;
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-top: 8px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.executable-theme .live-voice-caption.hidden {
+  display: none;
+}
+
+body.executable-theme .boson-voice-badge {
+  background: rgba(139, 164, 196, 0.1);
+  color: var(--color-info);
+  border-color: rgba(139, 164, 196, 0.22);
+}
+
+body.executable-theme .voice-orb {
+  background: radial-gradient(circle at 35% 30%, #e0f2fe, #ffffff);
+  border-color: var(--border-light);
+}
+
+body.executable-theme .voice-orb.active {
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.25), 0 0 20px rgba(2, 132, 199, 0.15);
+}
+
+body.executable-theme .scenario-advanced {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+body.executable-theme .scenario-advanced summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+
+body.executable-theme .scenario-advanced .scenario-bar {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+body.executable-theme .pill-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+body.executable-theme .pill-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+body.executable-theme .app-footer {
+  background: #ffffff;
+  border-top-color: var(--border-light);
+}
+
+body.executable-theme .capability-chip {
+  background: #f8fafc;
+  border-color: var(--border-light);
+}
+
+body.executable-theme .capability-chip.active {
+  border-color: rgba(107, 155, 122, 0.28);
+}
+
+body.executable-theme .main-content {
+  padding-top: 20px;
+}
+
+body.executable-theme .dashboard-grid {
+  gap: 16px;
+}
+
+body.executable-theme .chat-input-bar input {
+  background: #ffffff;
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+body.executable-theme .chat-input-bar input::placeholder {
+  color: var(--text-muted);
+}
+
+body.executable-theme .voice-provider-select {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  min-width: 160px;
+}
+
+body.executable-theme .voice-config-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+body.executable-theme .reasoning-badge {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: #f1f5f9;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+body.executable-theme .telephony-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: #f8fafc;
+}
+
+body.executable-theme .telephony-panel.hidden {
+  display: none;
+}
+
+body.executable-theme .telephony-panel h4 {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+body.executable-theme .telephony-help {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+body.executable-theme .telephony-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+body.executable-theme .telephony-row input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+body.executable-theme .telephony-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+body.executable-theme .telephony-plan {
+  font-size: 11px;
+  white-space: pre-wrap;
+  background: #fff;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  max-height: 140px;
+  overflow: auto;
+  color: var(--text-secondary);
 }
 
 .capability-matrix-note {

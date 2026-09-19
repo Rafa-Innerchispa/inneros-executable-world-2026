@@ -3,8 +3,7 @@
   const liveBtn = document.getElementById("liveMicBtn");
   const stopBtn = document.getElementById("stopMicBtn");
   const statusEl = document.getElementById("voiceAgentStatus");
-  const agentTranscriptEl = document.getElementById("agentTranscript");
-  const userTranscriptEl = document.getElementById("transcriptBox");
+  const liveCaptionEl = document.getElementById("liveVoiceCaption");
   const orb = document.getElementById("voiceOrb");
   const audioBadge = document.getElementById("audioSourceBadge");
   const voiceBadge = document.getElementById("assemblyaiVoiceBadge");
@@ -22,7 +21,25 @@
       statusEl.className = kind ? `assemblyai-live-status ${kind}` : "assemblyai-live-status";
     }
     if (orb) orb.className = `voice-orb ${kind || "idle"}`;
-    if (audioBadge) audioBadge.textContent = `AUDIO: ${kind === "ready" || kind === "active" ? "ASSEMBLYAI LIVE" : "STANDBY"}`;
+    if (audioBadge) audioBadge.textContent = `Voz: ${kind === "ready" || kind === "active" ? "AssemblyAI" : "standby"}`;
+  }
+
+  function setLiveCaption(text) {
+    if (!liveCaptionEl) return;
+    const t = String(text || "").trim();
+    if (!t) {
+      liveCaptionEl.textContent = "";
+      liveCaptionEl.classList.add("hidden");
+      return;
+    }
+    liveCaptionEl.textContent = t;
+    liveCaptionEl.classList.remove("hidden");
+  }
+
+  function appendToChat(role, text) {
+    if (typeof window.appendChat === "function") {
+      window.appendChat(role, text);
+    }
   }
 
   const voiceAgent = {
@@ -35,10 +52,12 @@
     ready: false,
     sessionId: null,
     lastFinalUserTranscript: "",
+    lastAgentTranscript: "",
     pendingToolCalls: [],
     handledToolCallIds: new Set(),
     scheduledAudio: [],
     nextPlaybackTime: 0,
+    stopping: false,
   };
 
   const inspectTool = {
@@ -61,15 +80,14 @@
       type: "session.update",
       session: {
         system_prompt: [
-          "Eres la interfaz de voz de InnerOS VoiceOps. Responde en español, breve y profesional.",
-          "Para solicitudes operativas llama inspect_and_propose_action. No inventes telemetría.",
-          "Solo llama approve_pending_action con autorización explícita del usuario.",
+          "Eres InnerOS VoiceOps para operaciones en Guayaquil. Habla español natural, conversacional y breve (1-3 frases).",
+          "Para acciones operativas usa inspect_and_propose_action. approve_pending_action solo con autorización explícita.",
         ].join(" "),
-        greeting: "InnerOS VoiceOps listo. ¿Qué quieres revisar en Guayaquil?",
-        output: { voice: "anna", format: { encoding: "audio/pcm" } },
+        greeting: "InnerOS listo. ¿Qué revisamos en Guayaquil?",
+        output: { voice: "lola", format: { encoding: "audio/pcm" }, volume: 92 },
         input: {
           format: { encoding: "audio/pcm" },
-          keyterms: ["InnerOS", "Ralphi", "alarma", "solar", "sí autorizo"],
+          keyterms: ["InnerOS", "Ralphi", "alarma", "solar", "sí autorizo", "Home Assistant"],
           language_codes: ["es"],
         },
         tools: [inspectTool],
@@ -82,12 +100,12 @@
       return {
         type: "session.update",
         session: {
-          system_prompt: "Hay propuesta pendiente. Pide autorización explícita. Si autoriza, llama approve_pending_action.",
+          system_prompt: "Hay propuesta pendiente. Pide autorización explícita en español.",
           tools: [approveTool],
         },
       };
     }
-    return { type: "session.update", session: { system_prompt: "Operación completada. Confirma resultado.", tools: [] } };
+    return { type: "session.update", session: { system_prompt: "Operación completada. Confirma en español.", tools: [] } };
   }
 
   function pcm16Base64(floatSamples, inputRate) {
@@ -113,7 +131,7 @@
   }
 
   function playVoiceAgentAudio(data) {
-    if (!voiceAgent.audioCtx) return;
+    if (!voiceAgent.audioCtx || voiceAgent.stopping) return;
     const binary = atob(data);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
@@ -146,7 +164,7 @@
   }
 
   async function flushToolCalls() {
-    if (!voiceAgent.ws || voiceAgent.ws.readyState !== WebSocket.OPEN) return;
+    if (!voiceAgent.ws || voiceAgent.ws.readyState !== WebSocket.OPEN || voiceAgent.stopping) return;
     const calls = voiceAgent.pendingToolCalls.splice(0);
     for (const call of calls) {
       let result;
@@ -171,15 +189,23 @@
     if (msg.type === "session.ready") {
       voiceAgent.ready = true;
       voiceAgent.sessionId = msg.session_id;
-      setLiveStatus(`LIVE · ${msg.session_id}`, "ready");
-      if (voiceBadge) voiceBadge.textContent = "AssemblyAI Voice Agent · anna";
+      setLiveStatus(`EN VIVO · ${msg.session_id}`, "ready");
+      if (voiceBadge) voiceBadge.textContent = "AssemblyAI · español";
     } else if (msg.type === "transcript.user") {
-      voiceAgent.lastFinalUserTranscript = msg.text || "";
-      if (userTranscriptEl) userTranscriptEl.textContent = voiceAgent.lastFinalUserTranscript;
+      const text = (msg.text || "").trim();
+      voiceAgent.lastFinalUserTranscript = text;
+      setLiveCaption(text ? `Tú: ${text}` : "");
+      if (text) appendToChat("user", text);
     } else if (msg.type === "reply.audio" && msg.data) {
       playVoiceAgentAudio(msg.data);
-    } else if (msg.type === "transcript.agent" && agentTranscriptEl) {
-      agentTranscriptEl.textContent = msg.text || "";
+    } else if (msg.type === "transcript.agent") {
+      const agentText = (msg.text || "").trim();
+      voiceAgent.lastAgentTranscript = agentText;
+      setLiveCaption(agentText ? `Agente: ${agentText}` : "");
+      if (agentText && agentText !== voiceAgent.lastPostedAgent) {
+        voiceAgent.lastPostedAgent = agentText;
+        appendToChat("agent", agentText);
+      }
     } else if (msg.type === "tool.call") {
       const duplicate =
         voiceAgent.handledToolCallIds.has(msg.call_id) ||
@@ -189,27 +215,31 @@
         setLiveStatus(`TOOL · ${msg.name}`, "active");
       }
     } else if (msg.type === "reply.done") {
+      voiceAgent.lastPostedAgent = "";
+      setLiveCaption("");
       if (msg.status === "interrupted") {
         voiceAgent.pendingToolCalls = [];
         flushVoicePlayback();
-        setLiveStatus("INTERRUPTED", "warning");
+        setLiveStatus("INTERRUMPIDO", "warning");
       } else {
         await flushToolCalls();
-        if (voiceAgent.ready) setLiveStatus(`LIVE · ${voiceAgent.sessionId}`, "ready");
+        if (voiceAgent.ready && !voiceAgent.stopping) setLiveStatus(`EN VIVO · ${voiceAgent.sessionId}`, "ready");
       }
     } else if (msg.type === "session.error") {
       setLiveStatus(`ERROR · ${msg.message || msg.code}`, "blocked");
     } else if (msg.type === "session.ended") {
-      setLiveStatus("SESSION ENDED");
       cleanupVoiceAgent(false);
     }
   }
 
   function cleanupVoiceAgent(closeSocket = true) {
+    voiceAgent.stopping = false;
     voiceAgent.ready = false;
     voiceAgent.pendingToolCalls = [];
     voiceAgent.handledToolCallIds.clear();
+    voiceAgent.lastPostedAgent = "";
     flushVoicePlayback();
+    setLiveCaption("");
     if (voiceAgent.processor) {
       voiceAgent.processor.disconnect();
       voiceAgent.processor.onaudioprocess = null;
@@ -218,19 +248,27 @@
     if (voiceAgent.silentGain) voiceAgent.silentGain.disconnect();
     if (voiceAgent.mediaStream) voiceAgent.mediaStream.getTracks().forEach((track) => track.stop());
     if (voiceAgent.audioCtx) voiceAgent.audioCtx.close().catch(() => {});
-    if (closeSocket && voiceAgent.ws && voiceAgent.ws.readyState === WebSocket.OPEN) voiceAgent.ws.close();
+    voiceAgent.audioCtx = null;
+    if (closeSocket && voiceAgent.ws) {
+      try {
+        if (voiceAgent.ws.readyState === WebSocket.OPEN) voiceAgent.ws.close();
+      } catch (_) {}
+    }
     voiceAgent.ws = null;
     if (liveBtn) liveBtn.disabled = false;
     if (stopBtn) stopBtn.disabled = true;
+    setLiveStatus("DETENIDO");
   }
 
   async function startVoiceAgent() {
     if (!liveBtn) return;
+    voiceAgent.stopping = false;
     liveBtn.disabled = true;
-    setLiveStatus("REQUESTING TOKEN…", "active");
+    setLiveStatus("CONECTANDO…", "active");
     try {
+      if (typeof window.unlockAudioOutput === "function") await window.unlockAudioOutput();
       const current = await api("/api/state");
-      if (!current.assemblyai_voice_agent_enabled) throw new Error("Live AssemblyAI disabled on server");
+      if (!current.assemblyai_voice_agent_enabled) throw new Error("AssemblyAI deshabilitado en servidor");
       await api("/api/reset", { method: "POST", body: "{}" });
       const tokenPayload = await api("/api/assemblyai/token");
       voiceAgent.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -248,16 +286,16 @@
       voiceAgent.silentGain.connect(voiceAgent.audioCtx.destination);
       voiceAgent.ws = new WebSocket(`wss://agents.assemblyai.com/v1/ws?token=${encodeURIComponent(tokenPayload.token)}`);
       voiceAgent.ws.addEventListener("open", () => {
-        setLiveStatus("CONNECTED", "active");
+        setLiveStatus("CONECTADO", "active");
         voiceAgent.ws.send(JSON.stringify(voiceAgentConfig()));
       });
       voiceAgent.ws.addEventListener("message", (event) => {
         handleVoiceAgentMessage(event).catch((err) => setLiveStatus(`ERROR · ${err.message}`, "blocked"));
       });
       voiceAgent.ws.addEventListener("close", () => cleanupVoiceAgent(false));
-      voiceAgent.ws.addEventListener("error", () => setLiveStatus("WEBSOCKET ERROR", "blocked"));
+      voiceAgent.ws.addEventListener("error", () => setLiveStatus("ERROR WEBSOCKET", "blocked"));
       voiceAgent.processor.onaudioprocess = (audioEvent) => {
-        if (!voiceAgent.ready || !voiceAgent.ws || voiceAgent.ws.readyState !== WebSocket.OPEN) return;
+        if (voiceAgent.stopping || !voiceAgent.ready || !voiceAgent.ws || voiceAgent.ws.readyState !== WebSocket.OPEN) return;
         voiceAgent.ws.send(JSON.stringify({
           type: "input.audio",
           audio: pcm16Base64(audioEvent.inputBuffer.getChannelData(0), voiceAgent.audioCtx.sampleRate),
@@ -271,23 +309,15 @@
   }
 
   function stopVoiceAgent() {
+    voiceAgent.stopping = true;
+    flushVoicePlayback();
     if (voiceAgent.ws && voiceAgent.ws.readyState === WebSocket.OPEN) {
-      voiceAgent.ws.send(JSON.stringify({ type: "session.end" }));
-      setLiveStatus("ENDING…", "warning");
-      window.setTimeout(() => cleanupVoiceAgent(true), 1200);
-    } else {
-      cleanupVoiceAgent(true);
-      setLiveStatus("SESSION ENDED");
+      try {
+        voiceAgent.ws.send(JSON.stringify({ type: "session.end" }));
+      } catch (_) {}
     }
-  }
-
-  if (liveBtn) {
-    liveBtn.replaceWith(liveBtn.cloneNode(true));
-    document.getElementById("liveMicBtn").addEventListener("click", startVoiceAgent);
-  }
-  if (stopBtn) {
-    stopBtn.replaceWith(stopBtn.cloneNode(true));
-    document.getElementById("stopMicBtn").addEventListener("click", stopVoiceAgent);
+    cleanupVoiceAgent(true);
+    setLiveStatus("DETENIDO");
   }
 
   window.startAssemblyAIVoice = startVoiceAgent;

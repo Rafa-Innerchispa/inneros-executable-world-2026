@@ -144,6 +144,69 @@ class GrandstreamAMIAdapter:
     def list_sip_peers(self) -> list[dict[str, str]]:
         return self.read_action("SIPpeers")
 
+    def originate_internal_extension(
+        self,
+        extension: str,
+        *,
+        context: str | None = None,
+        caller_id: str | None = None,
+    ) -> dict[str, str]:
+        """Ring an internal PBX extension via AMI Originate (opt-in only).
+
+        Disabled unless ``VOICEOPS_TELEPHONY_ORIGINATE_ENABLED=true`` in the deployment env.
+        """
+
+        enabled = os.getenv("VOICEOPS_TELEPHONY_ORIGINATE_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+        if not enabled:
+            raise AMIPermissionError("AMI Originate disabled; set VOICEOPS_TELEPHONY_ORIGINATE_ENABLED=true")
+
+        normalized = extension.strip()
+        if not normalized or any(ch not in "0123456789*#" for ch in normalized):
+            raise ValueError("extension must contain only dialable extension characters")
+
+        dial_context = (context or os.getenv("VOICEOPS_TELEPHONY_ORIGINATE_CONTEXT", "from-internal")).strip()
+        agent_ext = os.getenv("VOICEOPS_TELEPHONY_AGENT_EXTENSION", "").strip()
+        cid = caller_id or f'"InnerOS VoiceOps" <{agent_ext or "100"}>'
+
+        channel_candidates: list[str] = []
+        if agent_ext and agent_ext != normalized:
+            channel_candidates.extend([f"SIP/{agent_ext}", f"PJSIP/{agent_ext}"])
+        channel_candidates.extend(
+            [
+                f"Local/{normalized}@from-internal/n",
+                f"PJSIP/{normalized}",
+                f"SIP/{normalized}",
+            ]
+        )
+
+        username, secret = self._credentials()
+        with self._connect() as conn:
+            buffer = bytearray()
+            self._read_banner(conn, buffer)
+            self._login_md5(conn, buffer, username, secret)
+            errors: list[str] = []
+            for channel in channel_candidates:
+                action_id = self._action_id("originate")
+                self._send(
+                    conn,
+                    {
+                        "Action": "Originate",
+                        "ActionID": action_id,
+                        "Channel": channel,
+                        "Context": dial_context,
+                        "Exten": normalized,
+                        "Priority": "1",
+                        "CallerID": cid,
+                        "Async": "true",
+                    },
+                )
+                reply = self._read_message(conn, buffer)
+                if reply.get("Response") == "Success":
+                    reply["ChannelUsed"] = channel
+                    return reply
+                errors.append(f"{channel}: {reply.get('Message', 'failed')}")
+            raise AMIError("; ".join(errors) or "AMI Originate failed")
+
     def read_action(
         self,
         action: str,

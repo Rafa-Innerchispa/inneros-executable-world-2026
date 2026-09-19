@@ -23,7 +23,9 @@ Provider-agnostic sovereign runtime for hackathon demos.
 
 **CORE LOCAL ✓** — Qwen, execution engine, approval gate, permits, evidence, Grandstream, MCP/tools
 
-**OPTIONAL ○** — AssemblyAI, Boson, AgentX, VeloDB, EdgeOne, Memories.ai, WorkBuddy
+**OPTIONAL ○** — AssemblyAI, Boson, AgentX (self-hosted), VeloDB, EdgeOne
+
+**OUT OF SCOPE** — InsForge, InstaCloud, Memories.ai, AWS migration
 
 See `PROVENANCE.md` for baseline lineage from `inneros-voiceops-assemblyai`.
 

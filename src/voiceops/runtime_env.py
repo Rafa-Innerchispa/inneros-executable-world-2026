@@ -8,6 +8,7 @@ def load_runtime_env() -> None:
     """Load KEY=VALUE pairs from local runtime env files without overwriting existing env."""
     candidates = [
         Path(__file__).resolve().parents[2] / ".env",
+        Path.home() / ".config" / "inneros" / "executable.env",
         Path.home() / ".config" / "inneros" / "voiceops.env",
         Path.home() / ".inneros" / "voiceops.env",
     ]

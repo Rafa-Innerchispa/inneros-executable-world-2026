@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import socket
+import time
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -265,17 +266,31 @@ class GrandstreamSipClient:
         self.bind()
         uri = f"sip:{self.host}:{self.sip_port}"
         self._registration_cseq += 1
-        first = self._send_and_receive(self._build_register(uri, self._registration_cseq, expires))
+        first_cseq = self._registration_cseq
+        first = self._send_and_receive(
+            self._build_register(uri, first_cseq, expires),
+            expected_cseq=first_cseq,
+            expected_method="REGISTER",
+        )
         if first.status_code == 200:
             return first
         if first.status_code not in {401, 407}:
-            raise SipAuthenticationError(f"REGISTER challenge failed with status {first.status_code}")
+            raise SipAuthenticationError(
+                f"REGISTER challenge failed with status {first.status_code} ({first.start_line})"
+            )
         challenge = parse_digest_challenge(first)
         self._registration_cseq += 1
+        auth_cseq = self._registration_cseq
         authorization = build_digest_authorization(challenge, method="REGISTER", uri=uri, auth=self.auth)
-        second = self._send_and_receive(self._build_register(uri, self._registration_cseq, expires, authorization))
+        second = self._send_and_receive(
+            self._build_register(uri, auth_cseq, expires, authorization),
+            expected_cseq=auth_cseq,
+            expected_method="REGISTER",
+        )
         if second.status_code != 200:
-            raise SipAuthenticationError(f"REGISTER authentication failed with status {second.status_code}")
+            raise SipAuthenticationError(
+                f"REGISTER authentication failed with status {second.status_code} ({second.start_line})"
+            )
         return second
 
     def dial_decision(self, target: str, *, explicit_user_request: bool, route_verified: bool, pbx_dial_string: str | None, allowlisted_autonomous_target: bool = False) -> DialDecision:
@@ -306,12 +321,162 @@ class GrandstreamSipClient:
             lines.append(authorization)
         return "\r\n".join(lines + [f"Content-Length: {len(sdp)}", "", ""]).encode() + sdp
 
-    def _send_and_receive(self, payload: bytes) -> SipMessage:
+    def invite_extension(
+        self,
+        target: str,
+        rtp_port: int,
+        *,
+        timeout_seconds: float = 45.0,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> tuple[SipDialog, SdpAudioEndpoint]:
+        """Place an authenticated INVITE to an internal extension and wait for 200 OK."""
+        self.register()
+        _decision, dialog, payload = self.create_invite_dialog(
+            target,
+            explicit_user_request=True,
+            route_verified=True,
+            pbx_dial_string=target,
+            rtp_port=rtp_port,
+        )
+        invite_cseq = dialog.cseq
+        deadline = time.monotonic() + timeout_seconds
+        auth_sent = False
         if self._sip_socket is None:
             raise SipError("client is not bound")
         self._sip_socket.sendto(payload, (self.host, self.sip_port))
-        data, _ = self._sip_socket.recvfrom(65535)
-        return parse_sip_message(data)
+        while time.monotonic() < deadline:
+            if should_cancel and should_cancel():
+                self.send_cancel_invite(dialog, invite_cseq)
+                raise SipError("call cancelled")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            self._sip_socket.settimeout(min(1.0, remaining))
+            try:
+                data, _ = self._sip_socket.recvfrom(65535)
+            except socket.timeout:
+                continue
+            message = parse_sip_message(data)
+            code = message.status_code
+            if code in {100, 180, 183}:
+                continue
+            if code in {401, 407} and not auth_sent:
+                challenge = parse_digest_challenge(message)
+                dialog.cseq += 1
+                invite_cseq = dialog.cseq
+                authorization = build_digest_authorization(
+                    challenge,
+                    method="INVITE",
+                    uri=dialog.remote_uri,
+                    auth=self.auth,
+                )
+                payload = self._build_invite(dialog, rtp_port, authorization)
+                self._sip_socket.sendto(payload, (self.host, self.sip_port))
+                auth_sent = True
+                continue
+            if code == 200:
+                remote = parse_sdp_audio(message.body)
+                dialog.to_header = message.header("to") or f"<{dialog.remote_uri}>"
+                dialog.established = True
+                self._send_ack(dialog)
+                return dialog, remote
+            if code is not None and code >= 400:
+                raise SipError(message.header("reason") or message.start_line)
+        self.send_cancel_invite(dialog, invite_cseq)
+        raise SipError(f"INVITE to {target} timed out")
+
+    def _send_ack(self, dialog: SipDialog) -> None:
+        if self._sip_socket is None:
+            raise SipError("client is not bound")
+        to_header = dialog.to_header or f"<{dialog.remote_uri}>"
+        lines = [
+            f"ACK {dialog.remote_uri} SIP/2.0",
+            f"Via: SIP/2.0/UDP {self.local_ip}:{self.local_port};branch=z9hG4bK{secrets.token_hex(8)};rport",
+            "Max-Forwards: 70",
+            f"From: \"InnerOS VoiceOps\" <{dialog.local_uri}>;tag={dialog.from_tag}",
+            f"To: {to_header}",
+            f"Call-ID: {dialog.call_id}",
+            f"CSeq: {dialog.cseq} ACK",
+            f"Contact: <sip:{self.auth.extension}@{self.local_ip}:{self.local_port}>",
+            "Content-Length: 0",
+            "",
+            "",
+        ]
+        self._sip_socket.sendto("\r\n".join(lines).encode("utf-8"), (self.host, self.sip_port))
+
+    def send_cancel_invite(self, dialog: SipDialog, invite_cseq: int) -> None:
+        if self._sip_socket is None:
+            return
+        to_header = dialog.to_header or f"<{dialog.remote_uri}>"
+        lines = [
+            f"CANCEL {dialog.remote_uri} SIP/2.0",
+            f"Via: SIP/2.0/UDP {self.local_ip}:{self.local_port};branch=z9hG4bK{secrets.token_hex(8)};rport",
+            "Max-Forwards: 70",
+            f"From: \"InnerOS VoiceOps\" <{dialog.local_uri}>;tag={dialog.from_tag}",
+            f"To: {to_header}",
+            f"Call-ID: {dialog.call_id}",
+            f"CSeq: {invite_cseq} CANCEL",
+            f"Contact: <sip:{self.auth.extension}@{self.local_ip}:{self.local_port}>",
+            "Content-Length: 0",
+            "",
+            "",
+        ]
+        self._sip_socket.sendto("\r\n".join(lines).encode("utf-8"), (self.host, self.sip_port))
+
+    def send_bye(self, dialog: SipDialog) -> None:
+        if self._sip_socket is None or not dialog.established:
+            return
+        dialog.cseq += 1
+        to_header = dialog.to_header or f"<{dialog.remote_uri}>"
+        lines = [
+            f"BYE {dialog.remote_uri} SIP/2.0",
+            f"Via: SIP/2.0/UDP {self.local_ip}:{self.local_port};branch=z9hG4bK{secrets.token_hex(8)};rport",
+            "Max-Forwards: 70",
+            f"From: \"InnerOS VoiceOps\" <{dialog.local_uri}>;tag={dialog.from_tag}",
+            f"To: {to_header}",
+            f"Call-ID: {dialog.call_id}",
+            f"CSeq: {dialog.cseq} BYE",
+            "Content-Length: 0",
+            "",
+            "",
+        ]
+        self._sip_socket.sendto("\r\n".join(lines).encode("utf-8"), (self.host, self.sip_port))
+
+    def _send_and_receive(
+        self,
+        payload: bytes,
+        *,
+        expected_cseq: int | None = None,
+        expected_method: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> SipMessage:
+        if self._sip_socket is None:
+            raise SipError("client is not bound")
+        self._sip_socket.sendto(payload, (self.host, self.sip_port))
+        deadline = time.monotonic() + (timeout_seconds if timeout_seconds is not None else self.timeout_seconds)
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            self._sip_socket.settimeout(max(0.05, min(1.0, remaining)))
+            try:
+                data, _ = self._sip_socket.recvfrom(65535)
+            except socket.timeout:
+                continue
+            message = parse_sip_message(data)
+            if expected_cseq is None or expected_method is None:
+                return message
+            cseq_header = message.header("cseq")
+            if not cseq_header:
+                continue
+            parts = cseq_header.split()
+            if len(parts) < 2:
+                continue
+            try:
+                cseq_num = int(parts[0])
+            except ValueError:
+                continue
+            if cseq_num == expected_cseq and parts[1].upper() == expected_method.upper():
+                return message
+        raise SipError(f"SIP {expected_method or 'request'} timed out waiting for response")
 
 
 def _md5_hex(value: str) -> str:

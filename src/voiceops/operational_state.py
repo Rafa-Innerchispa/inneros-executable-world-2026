@@ -31,14 +31,7 @@ class OperationalStateRegistry:
     _active_proposals: dict[str, ActionProposal] = field(default_factory=dict)
     _evidence_events: list[EvidenceEvent] = field(default_factory=list)
     _permit_manager: VoiceExecutionPermitManager = field(default_factory=VoiceExecutionPermitManager)
-    _registered_extensions: list[dict[str, str]] = field(
-        default_factory=lambda: [
-            {"ext": "100", "label": "Control Room Dispatcher", "status": "ONLINE"},
-            {"ext": "101", "label": "Field Operations Lead", "status": "ONLINE"},
-            {"ext": "102", "label": "Substation Engineer", "status": "ONLINE"},
-            {"ext": "103", "label": "Solar Array Technician", "status": "ONLINE"},
-        ]
-    )
+    _registered_extensions: list[dict[str, str]] = field(default_factory=list)
 
     def register_extension(self, ext: str, label: str = "Field Extension", status: str = "ONLINE") -> dict[str, str]:
         """Registers a new SIP extension in the Grandstream UCM6104 PBX state."""
@@ -59,7 +52,7 @@ class OperationalStateRegistry:
             return {"ok": True, "unregistered_extension": existing, "all_extensions": list(self._registered_extensions)}
         return {"ok": False, "error": f"Extension {ext} not found"}
 
-    _ap_solaryard_degraded: bool = True
+    _ap_solaryard_degraded: bool = False
 
     def reset_ap_solaryard(self) -> None:
         self._ap_solaryard_degraded = False
@@ -105,7 +98,7 @@ class OperationalStateRegistry:
             tel_truth = "UNVERIFIED"
             tel_provider = str(ami_snapshot.get("source_provider") or "Grandstream UCM6104 (UDP 4321 / TCP 7777 AMI)")
             tel_status = "UNVERIFIED"
-            registered_extensions = list(self._registered_extensions)
+            registered_extensions = []
 
         # 2. Solar & Energy Provider
         solar_truth = str(ha_snapshot.get("truth") or "UNVERIFIED")
@@ -131,8 +124,12 @@ class OperationalStateRegistry:
         unifi_cpu = _reading_float("unifi_cpu")
         net_truth = "LIVE" if unifi_wan is not None or unifi_cpu is not None else "UNVERIFIED"
         net_provider = "UniFi Dream Machine & Cloud Gateway Ultra"
-        net_status = "ALERT_ACTIVE" if self._ap_solaryard_degraded else "OPTIMAL"
-        ap_yard_status = "DEGRADED (18% packet loss, channel interference detected)" if self._ap_solaryard_degraded else "OPTIMAL (0.0% packet loss, PoE power-cycled)"
+        net_status = "ALERT_ACTIVE" if self._ap_solaryard_degraded else ("OPTIMAL" if net_truth == "LIVE" else "UNVERIFIED")
+        ap_yard_status = (
+            "DEGRADED (operator reset pending)"
+            if self._ap_solaryard_degraded
+            else ("OPTIMAL" if net_truth == "LIVE" else "UNVERIFIED")
+        )
 
         alarm_state = _reading_text("alarm_panel")
         security_truth = "LIVE" if alarm_state is not None else "UNVERIFIED"
@@ -143,24 +140,26 @@ class OperationalStateRegistry:
                 "subsystem": "telephony",
                 "source_provider": tel_provider,
                 "truth": force_mode or tel_truth,
-                "observed_at": ami_snapshot.get("observed_at") or _now_iso(),
-                "freshness_seconds": ami_snapshot.get("freshness_seconds"),
+                "observed_at": ami_snapshot.get("observed_at") if tel_truth == "LIVE" else None,
+                "freshness_seconds": ami_snapshot.get("freshness_seconds") if tel_truth == "LIVE" else None,
                 "location": "Guayaquil Node - Grandstream UCM6104 PBX",
                 "status": tel_status,
                 "hardware": "Grandstream UCM6104 (Firmware 1.0.20.48)",
                 "sip_bind": "UDP 4321 / G.711u / PCM16 mono 16kHz",
                 "registered_extensions": registered_extensions,
                 "ami_error": ami_snapshot.get("error"),
-                "active_trunk": "VoIP SIP Trunk - CNT Ecuador Telecom (E.164 Gov Policy)",
-                "trunk_quality": {"jitter_ms": 2.1, "packet_loss_pct": 0.0, "mos_score": 4.38},
+                "active_trunk": "VoIP SIP Trunk - CNT Ecuador Telecom (E.164 Gov Policy)" if tel_truth == "LIVE" else None,
+                "trunk_quality": {"jitter_ms": 2.1, "packet_loss_pct": 0.0, "mos_score": 4.38}
+                if tel_truth == "LIVE"
+                else None,
                 "policy_mode": "Strict Ecuador PSTN whitelist + fail-closed internal extension routing",
             },
             "solar_power": {
                 "subsystem": "solar_power",
                 "source_provider": solar_provider,
                 "truth": force_mode or solar_truth,
-                "observed_at": ha_snapshot.get("observed_at") or _now_iso(),
-                "freshness_seconds": ha_snapshot.get("freshness_seconds"),
+                "observed_at": ha_snapshot.get("observed_at") if solar_truth == "LIVE" else None,
+                "freshness_seconds": ha_snapshot.get("freshness_seconds") if solar_truth == "LIVE" else None,
                 "location": "Guayaquil Solar Array & Battery Storage Bank 1",
                 "status": solar_status,
                 "inverter_model": "Xmart XSI-BB-120-3K-24-MPP / Growatt Hybrid (120V / 60Hz)",
@@ -171,21 +170,23 @@ class OperationalStateRegistry:
                 "pv_voltage_volts": pv_voltage,
                 "battery_charge_pct": battery_charge,
                 "battery_voltage_volts": battery_voltage,
-                "battery_temperature_c": 41.0,
+                "battery_temperature_c": None,
                 "grid_voltage_volts": grid_voltage,
-                "grid_synchronization": f"CONNECTED ({grid_voltage}V / 60Hz Guayaquil Grid)",
+                "grid_synchronization": (
+                    f"CONNECTED ({grid_voltage}V / 60Hz Guayaquil Grid)" if grid_voltage is not None else None
+                ),
                 "phase_a_current_amps": phase_a_current,
                 "phase_a_power_watts": phase_a_power,
                 "inferred_mode": inferred_mode,
-                "daily_yield_kwh": 18.64,
+                "daily_yield_kwh": None,
                 "ha_errors": ha_snapshot.get("errors") or [],
             },
             "security_alarm": {
                 "subsystem": "security_alarm",
                 "source_provider": "Home Assistant / Intelbras Guardian API",
                 "truth": force_mode or security_truth,
-                "observed_at": ha_snapshot.get("observed_at") or _now_iso(),
-                "freshness_seconds": ha_snapshot.get("freshness_seconds"),
+                "observed_at": ha_snapshot.get("observed_at") if security_truth == "LIVE" else None,
+                "freshness_seconds": ha_snapshot.get("freshness_seconds") if security_truth == "LIVE" else None,
                 "location": "Guayaquil Facility Perimeter & Control Vault",
                 "status": security_status,
                 "panel_model": "Intelbras AMT / Home Ralphi Security Hub",
@@ -210,80 +211,78 @@ class OperationalStateRegistry:
             "video_surveillance": {
                 "subsystem": "video_surveillance",
                 "source_provider": "Physical Guardian / Dahua Technology Core",
-                "truth": force_mode or "LIVE",
-                "observed_at": _now_iso(),
-                "freshness_seconds": 0.2,
+                "truth": force_mode or "UNVERIFIED",
+                "observed_at": None,
+                "freshness_seconds": None,
                 "location": "Guayaquil Facility Perimeter & Yard",
-                "status": "LIVE_MONITORING",
-                "nvr_host": "192.168.1.100 (NVR Dahua)",
-                "event_dispatcher": "VideoMotion Realtime Event Stream Active",
-                "channels": [
-                    {"channel": "C1", "alias": "Acceso Principal", "status": "LIVE_MOTION_ACTIVE", "fps": 30},
-                    {"channel": "C2", "alias": "Patio Exterior", "status": "LIVE_RECORDING", "fps": 30},
-                ],
+                "status": "UNVERIFIED",
+                "nvr_host": None,
+                "event_dispatcher": None,
+                "channels": [],
+                "note": "No live Guardian adapter snapshot on this host; configure Physical Guardian bridge for LIVE.",
             },
             "network_wifi": {
                 "subsystem": "network_wifi",
                 "source_provider": net_provider,
                 "truth": force_mode or net_truth,
-                "observed_at": ha_snapshot.get("observed_at") or _now_iso(),
-                "freshness_seconds": ha_snapshot.get("freshness_seconds"),
+                "observed_at": ha_snapshot.get("observed_at") if net_truth == "LIVE" else None,
+                "freshness_seconds": ha_snapshot.get("freshness_seconds") if net_truth == "LIVE" else None,
                 "location": "Guayaquil Field Operations Backbone",
                 "status": net_status,
                 "unifi_wan_status": unifi_wan,
                 "unifi_cpu_utilization_pct": unifi_cpu,
-                "primary_wan": "1.0 Gbps Fiber (Telconet GYE) - UniFi UDM WAN Online",
-                "backup_wan": "Claro LTE Emergency Cellular Backup (Standby)",
+                "primary_wan": "1.0 Gbps Fiber (Telconet GYE) - UniFi UDM WAN Online" if net_truth == "LIVE" else None,
+                "backup_wan": "Claro LTE Emergency Cellular Backup (Standby)" if net_truth == "LIVE" else None,
                 "access_points": [
-                    {"ap_id": "AP-ControlRoom", "band": "5GHz / WiFi 6", "clients": 12, "status": "OPTIMAL"},
                     {
                         "ap_id": "AP-SolarYard",
                         "band": "2.4GHz / WiFi 6",
-                        "clients": 4,
+                        "clients": None,
                         "status": ap_yard_status,
-                    },
-                    {"ap_id": "AP-TelecomVault", "band": "5GHz / WiFi 6", "clients": 6, "status": "OPTIMAL"},
-                ],
-                "core_switch": "UniFi Cloud Gateway Ultra (State: Connected, WAN RTT: 3.8ms)",
+                        "packet_loss_pct": None,
+                    }
+                ]
+                if net_truth == "LIVE"
+                else [],
+                "core_switch": (
+                    f"UniFi Cloud Gateway Ultra (WAN: {unifi_wan}, CPU: {unifi_cpu}%)"
+                    if net_truth == "LIVE"
+                    else None
+                ),
             },
             "dmx_lighting": {
                 "subsystem": "dmx_lighting",
                 "source_provider": "Art-Net DMX Universe 1 Bridge",
-                "truth": force_mode or "LIVE",
-                "observed_at": _now_iso(),
-                "freshness_seconds": 0.1,
+                "truth": force_mode or "UNVERIFIED",
+                "observed_at": None,
+                "freshness_seconds": None,
                 "location": "Guayaquil Facility & Yard Perimeter Control",
-                "status": "STANDBY",
+                "status": "UNVERIFIED",
                 "protocol": "Art-Net / DMX-512 over RS-485 (Universe 1)",
-                "active_scene": "Normal Operations (4000K Neutral, 80% intensity)",
-                "perimeter_floodlights": "OFF (Auto-dusk trigger at 18:30)",
-                "emergency_strobe_beacons": "READY (Channels 12-16 Armed)",
-                "yard_illumination_zones": {"Zone1_Solar": "ACTIVE", "Zone2_Telecom": "ACTIVE", "Zone3_Perimeter": "STANDBY"},
+                "active_scene": None,
+                "perimeter_floodlights": None,
+                "emergency_strobe_beacons": None,
+                "yard_illumination_zones": {},
+                "note": "Configure Hubitat/DMX read adapter for LIVE scene state.",
             },
             "servers_rack": {
                 "subsystem": "servers_rack",
                 "source_provider": "AG-41 Local Node Telemetry",
-                "truth": force_mode or "LIVE",
-                "observed_at": _now_iso(),
-                "freshness_seconds": 0.1,
+                "truth": force_mode or "UNVERIFIED",
+                "observed_at": None,
+                "freshness_seconds": None,
                 "location": "Guayaquil Rack 01 - Local Edge Node",
-                "status": "OPTIMAL",
-                "compute_host": "AMD Radeon AI PRO R9700 Edge Accelerator",
-                "cpu_model": "AG-41 AMD Ryzen 9 7900X (12C/24T)",
-                "audio_engine": "Boson AI Higgs Realtime S2S (Sub-125ms Interruption Engine)",
-                "rack_ambient_temp_c": 24.1,
-                "rack_exhaust_temp_c": 31.8,
-                "cpu_load_avg": [0.42, 0.38, 0.35],
-                "memory_used_gb": 18.2,
-                "memory_total_gb": 64.0,
-                "services": [
-                    {"name": "Home Assistant Core REST API", "port": 8123, "status": "HEALTHY", "uptime": "14d 6h"},
-                    {"name": "Boson AI Higgs Realtime Audio S2S", "model": "Higgs Audio S2S", "latency_ms": 29, "status": "RUNNING"},
-                    {"name": "Physical Guardian VideoMotion Dispatcher", "channels": ["C1", "C2"], "fps": 30, "status": "ONLINE"},
-                    {"name": "Grandstream UCM6104 SIP Telephony Bridge", "protocol": "UDP 4321 / TCP 7777", "status": "ONLINE"},
-                    {"name": "Audit Fabric Cryptographic Ledger", "engine": "SHA-256 State-Bound", "status": "ONLINE"},
-                ],
-                "cryptographic_store": "ONLINE (SHA-256 Forensic Audit Fabric Active)",
+                "status": "UNVERIFIED",
+                "compute_host": None,
+                "cpu_model": None,
+                "audio_engine": None,
+                "rack_ambient_temp_c": None,
+                "rack_exhaust_temp_c": None,
+                "cpu_load_avg": None,
+                "memory_used_gb": None,
+                "memory_total_gb": None,
+                "services": [],
+                "note": "Wire AG-41 health snapshot provider for LIVE rack telemetry.",
             },
             "instacloud": {
                 "subsystem": "instacloud",

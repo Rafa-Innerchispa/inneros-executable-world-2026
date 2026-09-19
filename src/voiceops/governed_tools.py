@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import time
 from dataclasses import asdict
 from typing import Any
 
@@ -13,6 +15,9 @@ from .operational_state import OperationalStateRegistry
 _GLOBAL_REGISTRY = OperationalStateRegistry()
 _APPROVAL_GATE = ExplicitApprovalGate()
 _PERMIT_MANAGER = VoiceExecutionPermitManager(ttl_seconds=60.0)
+_TELEMETRY_POLL_CACHE: dict[str, Any] | None = None
+_TELEMETRY_POLL_CACHE_AT: float = 0.0
+_TELEMETRY_POLL_CACHE_TTL_SECONDS = 3.0
 
 
 def get_operational_registry() -> OperationalStateRegistry:
@@ -29,9 +34,23 @@ def inspect_operational_state(
     Args:
         subsystem: The target subsystem ('solar_power', 'telephony', 'network_wifi', 'dmx_lighting', 'servers_rack', or 'all').
         live_fluctuation: Whether to include simulated micro-variations over time.
-        mirror_evidence: Mirror this inspect to InsForge when triggered by voice/tools (not telemetry polling).
+        mirror_evidence: Mirror this inspect to optional sponsor stores when triggered by voice/tools (not telemetry polling).
     """
+    global _TELEMETRY_POLL_CACHE, _TELEMETRY_POLL_CACHE_AT
+
+    if (
+        subsystem == "all"
+        and not mirror_evidence
+        and not live_fluctuation
+        and _TELEMETRY_POLL_CACHE is not None
+        and (time.monotonic() - _TELEMETRY_POLL_CACHE_AT) < _TELEMETRY_POLL_CACHE_TTL_SECONDS
+    ):
+        return copy.deepcopy(_TELEMETRY_POLL_CACHE)
+
     result = _GLOBAL_REGISTRY.get_subsystem_telemetry(subsystem, live_fluctuation=live_fluctuation)
+    if subsystem == "all" and not mirror_evidence and not live_fluctuation:
+        _TELEMETRY_POLL_CACHE = copy.deepcopy(result)
+        _TELEMETRY_POLL_CACHE_AT = time.monotonic()
     if mirror_evidence:
         from .adapters.insforge_mirror import mirror_voiceops_event
 

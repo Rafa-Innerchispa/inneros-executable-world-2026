@@ -1,90 +1,80 @@
-# Architecture — InnerOS VoiceOps
+# Architecture — InnerOS Executable World 2026
 
-## Principle
+**Canonical repo:** `Rafa-Innerchispa/inneros-executable-world-2026`  
+**Ops task:** `ops_734e12ead662`
 
-VoiceOps is an adapter/orchestration product over existing InnerOS capabilities. It must not become a fork of InnerOS.
+## CORE LOCAL (always on)
 
-## Data flow
+| Component | Role |
+|-----------|------|
+| VoiceOps web UI | Judge/demo panel at `executable.creatorcore.ai` |
+| Qwen / AMD reasoner | Local OpenAI-compatible endpoint on `.5` |
+| Governed tools | inspect → propose → explicit approval → execute |
+| Execution permits | Single-use SHA-256 bound permits |
+| Local evidence | `evidence/voiceops_events.jsonl` (always) |
+| Home Assistant | Live telemetry + allowlisted actions |
+| Grandstream PBX | SIP agent 1003 · user ext 1004 · RTP voice bridge |
+| Audit / HTR | Human time returned metrics |
+
+**Rule:** Core must run when all optional sponsors are `NOT_CONNECTED`.
+
+## OPTIONAL PROVIDERS (attach/detach)
+
+| Adapter | Purpose | Default |
+|---------|---------|---------|
+| AssemblyAI | Cloud STT/TTS voice channel | env-gated |
+| Boson Higgs | Cloud S2S voice channel | env-gated |
+| AgentX | **Self-hosted** tracing/evals | OFF |
+| VeloDB | Evidence event store mirror | OFF |
+| EdgeOne | Witness/CDN metadata only | OFF |
+
+**Not in scope:** InsForge, InstaCloud, Memories.ai, AWS migration.
+
+## Golden path
 
 ```text
-Browser / microphone
-  -> Voice session
-  -> AssemblyAI realtime streaming STT
-  -> normalized utterance + timing metadata
-  -> InnerOS Voice Gateway
-  -> policy/context/tenant resolution
-  -> Resource Fabric route decision
-  -> local AMD model preferred
-  -> MCP capability selection
-  -> approval gate when required
-  -> domain adapter / action
-  -> result
-  -> Audit Fabric hooks
-  -> HTR / Evidence Bundle / Replay reference
-  -> response text
-  -> TTS
-  -> user
+Voice (browser mic OR PBX RTP)
+  → InnerOS VoiceOps session
+  → Qwen local reasoning + tool calls
+  → live HA / AMI data (truth badges)
+  → AgentX self-hosted trace (optional)
+  → ExplicitApprovalGate
+  → VoiceExecutionPermit (single-use)
+  → Real PBX call OR governed HA action
+  → Local evidence JSONL
+  → VeloDB append (optional)
+  → EdgeOne witness ping (optional)
 ```
 
-## Boundaries
+## Telephony (frozen — do not redesign)
 
-### AssemblyAI adapter
-Responsible for audio streaming, connection lifecycle, transcript events, timing, errors, and speech-context features. It must not own business policy or tool authorization.
+Confirmed working owner path:
 
-### Voice Gateway
-Responsible for conversation/session state, correlation IDs, intent handoff, approval dialogue, interruption behavior, and translating speech events into InnerOS requests.
+- Server originates via SIP agent **1003**
+- User answers on Zoiper **1004**
+- Bidirectional audio + chat transcripts
+- Multi-provider voice on server (AssemblyAI / Boson / server-local)
+- Async `agent-call` + cancel + session polling
 
-### InnerOS
-Canonical control plane. Owns routing, capability access, policy, authorization, agent/tool orchestration, and local-first decisions.
+Changes to telephony require explicit owner approval.
 
-### Domain adapters
-Thin integration layer to Service Operations, VigilOS, Workforce, QuoteOps, etc. Business logic stays in its canonical system.
+## Data truth contract
 
-### Audit/evidence
-Record start/route/approval/action/result/quality references. Preserve source evidence and truth boundaries. Heavy raw evidence stays outside transactional Mongo when appropriate.
+Telemetry subsystems expose `truth`: `LIVE` | `UNVERIFIED` | `NOT_CONNECTED`.  
+No synthetic values labeled LIVE. AMI/HA failures degrade gracefully.
 
-### TTS
-Pluggable. Prefer local where practical. Do not couple core workflow correctness to one speech-synthesis vendor.
-
-## IDs
-
-Every voice workflow should carry:
+## IDs per turn
 
 - `session_id`
-- `correlation_id`
-- `turn_id`
-- `tenant_id` or synthetic-demo tenant
-- trace/span context where available
-- evidence bundle reference when generated
+- `correlation_id` / `proposal_id`
+- `permit_id`
+- `action_id`
+- evidence SHA-256
 
-## Approval model
+## Deployment
 
-A transcript is not automatically authorization. The Voice Gateway must distinguish:
+- **Production demo:** `.4` → `inneros-executable-world.service` → `:8769`
+- **Public URL:** Cloudflare → `executable.creatorcore.ai`
+- **Secrets:** `~/.config/inneros/executable.env` (never committed)
 
-- informational request;
-- proposed action;
-- explicit approval/denial;
-- ambiguous utterance;
-- interruption/cancellation.
-
-High-impact actions must fail closed when approval is absent or ambiguous.
-
-## Demo-safe architecture
-
-The public judge path must point to synthetic/demo capabilities. It must not expose direct production building/security controls.
-
-## Performance evidence
-
-Capture at least:
-
-- speech-end to final transcript latency;
-- transcript to route decision;
-- route to first model token/result when observable;
-- tool execution latency;
-- end-to-end voice workflow duration;
-- baseline human minutes;
-- assisted active human minutes;
-- rework/interventions;
-- local/cloud seconds and cost where available.
-
-Do not manufacture numbers to make charts prettier. Charts have survived without our emotional support for centuries.
+See also: `docs/SPONSOR_INTEGRATIONS.md`, `docs/DEMO_RUNBOOK.md`

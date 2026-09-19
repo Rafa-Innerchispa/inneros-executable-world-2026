@@ -172,6 +172,7 @@ def fetch_entity_state(
 def fetch_ha_snapshot(
     *,
     opener: Callable[..., Any] = urlopen,
+    per_entity_timeout: float = 2.5,
 ) -> dict[str, Any]:
     """Read configured Home Assistant entities for VoiceOps telemetry."""
     entities = _entity_map()
@@ -180,7 +181,7 @@ def fetch_ha_snapshot(
     errors: list[str] = []
 
     for label, entity_id in entities.items():
-        result = fetch_entity_state(entity_id, opener=opener)
+        result = fetch_entity_state(entity_id, opener=opener, timeout=per_entity_timeout)
         if not result.get("ok"):
             errors.append(f"{label}: {result.get('error', 'read failed')}")
             continue
