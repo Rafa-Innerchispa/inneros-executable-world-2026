@@ -258,7 +258,7 @@ def append_event(record: dict[str, Any]) -> dict[str, Any]:
     row = _record_to_row(record)
     started = time.monotonic()
     try:
-        conn = _connect()
+        conn = _connect(database=None)
         try:
             _ensure_schema(conn)
             _insert_row(conn, row)
@@ -273,6 +273,7 @@ def append_event(record: dict[str, Any]) -> dict[str, Any]:
 
     global _LAST_INSERT_VERIFIED
     _LAST_INSERT_VERIFIED = True
+    _PROBE_CACHE["ts"] = 0.0
     return {
         "stored": True,
         "event_id": row["event_id"],
