@@ -29,20 +29,22 @@ In `~/.cloudflared/opportunityops.yml`:
 
 Restart: `systemctl --user restart opportunityops-cloudflared.service`
 
-## DNS (creatorcore.ai zone)
+## DNS (creatorcore.ai zone) — InnerOS AG-44 integration
 
-Mirror other InnerOS hostnames (`fieldops`, `voiceops`): proxied **A** records to Cloudflare anycast, or CNAME to the `opportunityops` tunnel.
+Cloudflare is integrated on **`.4`** via InnerOS platform (`inneros_core_runtime/agents/ag44_cloud_deployer.py`).
+Credentials live in **owner_vault** (`cloudflare_pcdoctor_ai` category), not in repo env files.
 
-Example (Cloudflare dashboard → DNS → creatorcore.ai):
+On `.4`:
 
-| Type | Name | Content | Proxy |
-|------|------|---------|-------|
-| A | executable | 172.67.212.1 | Proxied |
-| A | executable | 104.21.53.103 | Proxied |
+```bash
+/home/rlopez/inneros/inneros_core/platform/venv/bin/python scripts/fix_executable_dns.py
+```
 
-Or CNAME: `executable` → `6fb8ceab-a17e-41b3-872d-e26ef2d1383f.cfargotunnel.com` (proxied).
+This creates a proxied CNAME → `6fb8ceab-a17e-41b3-872d-e26ef2d1383f.cfargotunnel.com` (same pattern as `fieldops`, `voiceops`).
 
-Tunnel ingress must include the hostname (see above).
+Tunnel ingress must include the hostname in `~/.cloudflared/opportunityops.yml` (see above).
+
+**Note:** `.5` does not host Cloudflare tunnel/DNS — tunnel runs on `.4` (`opportunityops-cloudflared.service`).
 
 ## Verify
 
