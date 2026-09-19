@@ -32,7 +32,7 @@ def test_http_server_serves_ui_and_governed_api_flow() -> None:
     try:
         with urlopen(base + "/", timeout=3) as response:  # noqa: S310 - local ephemeral test server
             page = response.read().decode("utf-8")
-        assert "InnerOS VoiceOps" in page
+        assert "InnerOS Executable World" in page
         assert "NO PROD WRITES" in page
 
         health = _get_json(base + "/healthz")
