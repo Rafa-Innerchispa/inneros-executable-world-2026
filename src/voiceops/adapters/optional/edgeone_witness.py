@@ -23,6 +23,18 @@ def pages_project() -> str:
     return os.getenv("EDGEONE_PAGES_PROJECT", "").strip()
 
 
+def is_remote_edgeone_witness_url(url: str) -> bool:
+    """True only for a public EdgeOne-deployed witness — not localhost/LAN smoke tests."""
+    if not url:
+        return False
+    lowered = url.strip().lower()
+    if lowered.startswith(("http://127.", "http://localhost", "http://[::1]", "https://127.", "https://localhost")):
+        return False
+    if "://192.168." in lowered or "://10." in lowered or "://172." in lowered:
+        return False
+    return lowered.startswith(("http://", "https://"))
+
+
 def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
     """Never forward secrets — keep receipt fields only."""
     data = record.get("data") if isinstance(record.get("data"), dict) else {}

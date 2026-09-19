@@ -30,6 +30,13 @@ if [ -f "${HOME}/.config/inneros/agentx.env" ]; then
   # shellcheck disable=SC1091
   source "${HOME}/.config/inneros/agentx.env"
 fi
+if [ -f "${HOME}/.config/inneros/velodb.env" ]; then
+  # shellcheck disable=SC1091
+  source "${HOME}/.config/inneros/velodb.env"
+fi
+if [ -n "${VELODB_PASSWORD:-}" ]; then
+  upsert VELODB_PASSWORD "${VELODB_PASSWORD}"
+fi
 if [ -n "${AGENTX_API_KEY:-}" ]; then
   upsert AGENTX_API_KEY "${AGENTX_API_KEY}"
 fi
