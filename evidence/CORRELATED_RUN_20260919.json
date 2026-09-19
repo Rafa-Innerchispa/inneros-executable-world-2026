@@ -1,0 +1,28 @@
+{
+  "session_id": "correlated-demo-b43aeccb5bf4",
+  "proposal_id": "prop_1856e0ee",
+  "permit_id": "vxp_24728b7c254d417e",
+  "evidence_hash": "acac5d12515d7f50f959216d86736c0217d5524069c70a847602c1d54a2b096e",
+  "execution_status": "FAILED",
+  "local_jsonl": {
+    "matched": true,
+    "event_type": "voiceops.correlated_demo"
+  },
+  "agentx": {
+    "stored": true,
+    "status": 200,
+    "url": "http://127.0.0.1:4700/api/v1/otel/v1/traces"
+  },
+  "velodb": {
+    "mirror": {
+      "stored": false,
+      "reason": "VELODB_PASSWORD unset"
+    },
+    "readback": null
+  },
+  "edgeone": {
+    "mirror_stored_local_smoke": true,
+    "integration_status_truth": "CONFIGURED",
+    "note": "Local :8791 smoke only — not counted as EdgeOne REAL"
+  }
+}
