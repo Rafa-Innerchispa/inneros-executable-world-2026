@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inneros-executable-world"
+version = "0.1.0"
+description = "Provider-agnostic InnerOS executable core with optional cloud adapters (Executable World 2026)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [{name = "InnerChispa LLC"}]
+dependencies = []
+
+[project.optional-dependencies]
+assemblyai = ["assemblyai>=1.0.0"]
+microphone = ["assemblyai>=1.0.0", "pyaudio>=0.2.14"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+voiceops-demo = "voiceops.demo:main"
+voiceops-live = "voiceops.live_demo:main"
+voiceops-web = "voiceops.webapp:main"
+executable-web = "voiceops.webapp:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+voiceops = ["web/*.html", "web/*.css", "web/*.js"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

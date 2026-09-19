@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f1419">
+  <title>InnerOS Executable World — Sovereign Local Core</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="canonical-theme">
+  <div class="app-layout">
+
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <div class="brand-text">
+            <span class="brand-title">InnerOS <strong>Executable World</strong></span>
+            <span class="brand-sub">Local core · Optional cloud adapters · Grandstream · Home Assistant LIVE</span>
+          </div>
+        </div>
+        <div class="site-tag">
+          <span class="pulse-dot green"></span>
+          <span>Guayaquil Operations Hub (GYE-Node-01)</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="model-badge">
+          <span class="badge-label">RUNTIME</span>
+          <span class="badge-val">Local Qwen · Provider-agnostic · Graceful degradation</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="governance-status">
+          <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>Fail-Closed Governance Active</span>
+        </div>
+        <span class="badge-pill">NO PROD WRITES</span>
+        <span id="audioSourceBadge" class="badge-pill">AUDIO_SOURCE: UNKNOWN</span>
+        <button id="refreshTelemetryBtn" class="btn btn-outline btn-sm">Sync Telemetry</button>
+      </div>
+    </header>
+
+    <!-- Critical Alert Banner -->
+    <div id="alertBanner" class="alert-banner">
+      <div class="alert-content">
+        <span class="alert-badge">OPERATIONS</span>
+        <span id="alertMessage" class="alert-text">
+          Telemetry active: [NETWORK_WIFI] Alert on AP-SolarYard (18% Packet Loss) · [SOLAR] 3,840W Normal · [PBX] 4 Extensions Active
+        </span>
+      </div>
+      <div class="alert-metrics">
+        <span class="metric-pill">Voice: <strong>AssemblyAI</strong></span>
+        <span class="metric-pill">Governance: <strong>Fail-Closed</strong></span>
+        <span class="metric-pill">Site: <strong>GYE-Node-01</strong></span>
+      </div>
+    </div>
+
+    <!-- Main Workspace Container -->
+    <main class="main-content">
+
+      <!-- Interactive Voice & Audio Hero -->
+      <section class="voice-hero card">
+        <div class="voice-hero-left">
+          <div class="voice-avatar-wrap">
+            <div id="voiceOrb" class="voice-orb idle">
+              <svg class="orb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+            </div>
+            <div class="voice-meta">
+              <div class="voice-title-row">
+                <h2 id="agentStateTitle">Executable Voice Dispatcher</h2>
+                <span id="audioPlayingTag" class="audio-tag hidden">SPEAKING AUDIO</span>
+              </div>
+              <p id="agentStateSubtitle">Governed voice execution with live Home Assistant telemetry and UCM6104 telephony</p>
+            </div>
+          </div>
+
+          <div class="waveform-wrap">
+            <canvas id="waveformCanvas" class="waveform-canvas" width="280" height="42"></canvas>
+          </div>
+        </div>
+
+        <div class="voice-hero-controls">
+          <div class="btn-group">
+            <button id="liveMicBtn" class="btn btn-primary btn-lg">
+              <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+              <span>Start Live Voice</span>
+            </button>
+            <button id="stopMicBtn" class="btn btn-secondary btn-lg" disabled>
+              <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>
+              <span>Stop Voice</span>
+            </button>
+          </div>
+
+          <div class="voice-config-row">
+            <span class="voice-select-label">Audio Output:</span>
+            <span id="assemblyaiVoiceBadge" class="boson-voice-badge">AssemblyAI Voice Agent · anna</span>
+          </div>
+          <div id="voiceAgentStatus" class="assemblyai-live-status">STANDBY</div>
+          <div id="agentTranscript" class="agent-transcript-box">Agent voice transcript appears here during a live session.</div>
+
+          <div class="scenario-bar">
+            <span class="scenario-label">Judge Demo Scenarios:</span>
+            <button class="pill-btn" onclick="triggerScenario('inspect')">1. Full Site Diagnostics</button>
+            <button class="pill-btn" onclick="triggerScenario('barge_in')">2. Instant Barge-In (&lt;50ms)</button>
+            <button class="pill-btn" onclick="triggerScenario('code_switch')">3. Technical Code-Switching</button>
+            <button class="pill-btn" onclick="triggerScenario('approve')">4. Governed Action Approval</button>
+            <button class="pill-btn" onclick="triggerScenario('reject')">5. Fail-Closed Ambiguity Block</button>
+            <button class="pill-btn" onclick="triggerScenario('incident_analysis')">6. Qwen Incident Analysis</button>
+            <button class="pill-btn" onclick="triggerScenario('zoiper_test')">7. Live Zoiper Connect/Drop</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3-Column Execution Dashboard -->
+      <div class="dashboard-grid">
+
+        <!-- Column 1: Subsystem Telemetry -->
+        <aside class="col-telemetry">
+          <div class="card panel">
+            <div class="panel-header">
+              <h3>Site Telemetry (Guayaquil)</h3>
+              <span class="badge-live"><span class="pulse-dot green"></span> LIVE STREAM</span>
+            </div>
+            
+            <div class="telemetry-sync-ticker">
+              <span id="telemetrySyncTime">Streaming GYE Node-01 · 0ms</span>
+            </div>
+
+            <div class="subsystems-list">
+
+              <!-- Solar Card -->
+              <div class="subsystem-card" id="cardSolar">
+                <div class="subsystem-head">
+                  <div class="subsystem-title">
+                    <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                    <strong>Solar Power & Battery Array</strong>
+                  </div>
+                  <div class="head-badges">
+                    <span class="truth-badge live" id="solTruth">LIVE</span>
+                    <span class="status-indicator optimal" id="solStatus">HEALTHY</span>
+                  </div>
+                </div>
+                <div class="subsystem-body">
+                  <div class="data-row"><span>AC Output (Inverter):</span><strong id="solGen">—</strong></div>
+                  <div class="data-row"><span>Battery Bank:</span><strong id="solBat">100% (52.4V)</strong></div>
+                  <div class="data-row"><span>Grid Sync:</span><strong id="solGrid">120.6V / 60Hz Guayaquil Grid</strong></div>
+                  <div class="provider-sub" id="solProvider">Source: Home Assistant Core / Xmart Inverter (Node AG-41)</div>
+                </div>
+              </div>
+
+              <!-- Telephony Card -->
+              <div class="subsystem-card" id="cardTelephony">
+                <div class="subsystem-head">
+                  <div class="subsystem-title">
+                    <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    <strong>Grandstream PBX Telephony</strong>
+                  </div>
+                  <div class="head-badges">
+                    <span class="truth-badge live" id="telTruth">LIVE</span>
+                    <span class="status-indicator optimal" id="telStatus">ONLINE</span>
+                  </div>
+                </div>
+                <div class="subsystem-body">
+                  <div class="data-row"><span>Hardware:</span><strong>UCM6104 (UDP 4321)</strong></div>
+                  <div class="data-row"><span>SIP Extensions:</span><strong id="telExts">4 Registered (100, 101, 102, 103)</strong></div>
+                  <div class="data-row"><span>SIP Quality:</span><strong id="telQuality">Jitter 2.1ms (MOS 4.38)</strong></div>
+                  <div style="display:flex; gap:6px; margin: 6px 0;">
+                    <button class="btn btn-xs btn-outline" style="padding:2px 6px; font-size:10px;" onclick="registerZoiperExt('104')">+ Connect Zoiper (104)</button>
+                    <button class="btn btn-xs btn-outline" style="padding:2px 6px; font-size:10px;" onclick="unregisterZoiperExt('104')">- Disconnect Zoiper (104)</button>
+                  </div>
+                  <div class="provider-sub" id="telProvider">Source: Grandstream UCM6104 (UDP 4321 / TCP 7777 AMI)</div>
+                </div>
+              </div>
+
+              <!-- WiFi / Network Card -->
+              <div class="subsystem-card alert" id="cardNetwork">
+                <div class="subsystem-head">
+                  <div class="subsystem-title">
+                    <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+                    <strong>Network & Access Points</strong>
+                  </div>
+                  <div class="head-badges">
+                    <span class="truth-badge live" id="netTruth">LIVE</span>
+                    <span class="status-indicator warning" id="netStatus">ALERT</span>
+                  </div>
+                </div>
+                <div class="subsystem-body">
+                  <div class="data-row"><span>Fiber WAN:</span><strong id="netWan">1.0 Gbps (RTT 3.8ms)</strong></div>
+                  <div class="data-row"><span>AP-SolarYard:</span><strong class="text-danger" id="netLoss">18.0% Packet Loss</strong></div>
+                  <div class="data-row"><span>Gateway:</span><strong id="netSwitch">UniFi Gateway Ultra (Online)</strong></div>
+                  <div class="provider-sub" id="netProvider">Source: UniFi Dream Machine & Cloud Gateway Ultra</div>
+                </div>
+              </div>
+
+              <!-- Security Alarm Card -->
+              <div class="subsystem-card" id="cardAlarm">
+                <div class="subsystem-head">
+                  <div class="subsystem-title">
+                    <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <strong>Intelbras Security Alarm</strong>
+                  </div>
+                  <div class="head-badges">
+                    <span class="truth-badge live" id="alarmTruth">LIVE</span>
+                    <span class="status-indicator optimal" id="alarmStatus">DISARMED</span>
+                  </div>
+                </div>
+                <div class="subsystem-body">
+                  <div class="data-row"><span>Partition:</span><strong>Panel Home Ralphi (0)</strong></div>
+                  <div class="data-row"><span>Perimeter Zones:</span><strong id="alarmZones">10 Zones Monitored</strong></div>
+                  <div class="data-row"><span>Alarm Trigger:</span><strong id="alarmTrigger">NORMAL (No Breach)</strong></div>
+                  <div class="provider-sub" id="alarmProvider">Source: Home Assistant / Intelbras Guardian API</div>
+                </div>
+              </div>
+
+              <!-- Video Surveillance Card -->
+              <div class="subsystem-card" id="cardCameras">
+                <div class="subsystem-head">
+                  <div class="subsystem-title">
+                    <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                    <strong>Dahua Video Surveillance</strong>
+                  </div>
+                  <div class="head-badges">
+                    <span class="truth-badge live" id="camTruth">LIVE</span>
+                    <span class="status-indicator optimal" id="camStatus">ACTIVE</span>
+                  </div>
+                </div>
+                <div class="subsystem-body">
+                  <div class="data-row"><span>Channels:</span><strong id="camChannels">C1 Acceso Principal · C2 Patio Exterior</strong></div>
+                  <div class="data-row"><span>Motion Event:</span><strong class="text-success" id="camMotion">VideoMotion Stream Online</strong></div>
+                  <div class="data-row"><span>NVR Host:</span><strong>192.168.1.100 (30 FPS)</strong></div>
+                  <div class="provider-sub" id="camProvider">Source: Physical Guardian / Dahua Technology Core</div>
+                </div>
+              </div>
+
+              <!-- DMX Lighting Card -->
+              <div class="subsystem-card" id="cardDmx">
+                <div class="subsystem-head">
+                  <div class="subsystem-title">
+                    <svg class="sub-svg" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/></svg>
+                    <strong>DMX-512 Lighting Control</strong>
+                  </div>
+                  <div class="head-badges">
+                    <span class="truth-badge live" id="dmxTruth">LIVE</span>
+                    <span class="status-indicator optimal" id="dmxStatus">STANDBY</span>
+                  </div>
+                </div>
+                <div class="subsystem-body">
+                  <div class="data-row"><span>Protocol:</span><strong>Art-Net (Universe 1)</strong></div>
+                  <div class="data-row"><span>Active Scene:</span><strong id="dmxScene">Normal Ops (80%)</strong></div>
+                  <div class="data-row"><span>Emergency Strobe:</span><strong>Channels 12-16 Ready</strong></div>
+                  <div class="provider-sub" id="dmxProvider">Source: Art-Net Universe 1 Bridge</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </aside>
+
+        <!-- Column 2: Dialogue & Mid-Conversation Tool Calls -->
+        <section class="col-conversation">
+          <div class="card panel flex-col flex-1">
+            <div class="panel-header">
+              <h3>Live Dialogue & Tool Stream</h3>
+              <span id="turnStatus" class="status-badge">Standby / Ready</span>
+            </div>
+
+            <!-- Live Action Execution Step Ticker -->
+            <div class="current-step-box">
+              <div class="step-indicator-wrap">
+                <span class="pulse-dot blue"></span>
+                <strong id="activeStepLabel">System Ready</strong>
+              </div>
+              <span id="activeStepDetail" class="step-detail">Listening for voice or simulated input...</span>
+            </div>
+
+            <div id="transcriptBox" class="transcript-box">
+              <div class="chat-bubble system">
+                <span class="bubble-meta">SYSTEM INITIALIZED</span>
+                <p>Boson AI Higgs Realtime S2S session connected. The agent has direct access to Guayaquil telemetry tools, instant barge-in, and fail-closed operational permits.</p>
+              </div>
+            </div>
+
+            <!-- Live Tool Call Ticker -->
+            <div class="tool-call-section">
+              <div class="tool-header">
+                <span class="tool-title">⚡ Mid-Conversation Function Calls (Higgs &rarr; VoiceOps)</span>
+                <span id="toolLatency" class="tool-latency">0 ms</span>
+              </div>
+              <div id="toolStream" class="tool-stream">
+                <div class="tool-item empty">Live tool executions stream here mid-speech with zero conversational delay.</div>
+              </div>
+            </div>
+
+            <!-- Manual Input Bar -->
+            <div class="chat-input-bar">
+              <input type="text" id="manualInput" placeholder="Type a simulated voice instruction (e.g., 'Inspect the network and propose a fix')..." />
+              <button id="sendManualBtn" class="btn btn-primary">Send</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Column 3: Safety Governance, Permit & HTR Receipt -->
+        <aside class="col-governance">
+
+          <!-- Capability Matrix -->
+          <div class="card panel partner-integrations-panel">
+            <div class="panel-header">
+              <h3>Capability Matrix</h3>
+              <span class="badge-pill" id="coreTruthBadge">CORE OPERATIONAL</span>
+            </div>
+            <p class="capability-matrix-note" id="capabilityNarrative">
+              Cloud AI services are replaceable. Local core stays up when adapters detach.
+            </p>
+            <div class="capability-section">
+              <div class="capability-section-head">CORE LOCAL ✓</div>
+              <div id="coreCapabilityGrid" class="capability-grid"></div>
+            </div>
+            <div class="capability-section">
+              <div class="capability-section-head">OPTIONAL ADAPTERS ○</div>
+              <div id="optionalCapabilityGrid" class="capability-grid"></div>
+            </div>
+          </div>
+
+          <!-- Home Assistant Control Picker -->
+          <div class="card panel ha-controls-panel">
+            <div class="panel-header">
+              <h3>Home Assistant Controls</h3>
+              <span id="haControlsTruth" class="status-badge pending">LOADING</span>
+            </div>
+            <p class="ha-controls-note">Selecciona una entidad y acción. VoiceOps creará una propuesta gobernada; luego autorizas por voz o con el botón.</p>
+            <div class="ha-controls-grid">
+              <label class="ha-field">
+                <span>Buscar</span>
+                <input id="haEntitySearch" type="search" placeholder="luz, unifi, alarma, switch…" autocomplete="off" />
+              </label>
+              <label class="ha-field">
+                <span>Dominio</span>
+                <select id="haDomainFilter">
+                  <option value="">Todos</option>
+                </select>
+              </label>
+              <label class="ha-field ha-field-wide">
+                <span>Entidad</span>
+                <select id="haEntitySelect" size="1">
+                  <option value="">Cargando entidades…</option>
+                </select>
+              </label>
+              <label class="ha-field">
+                <span>Acción</span>
+                <select id="haVerbSelect">
+                  <option value="on">Encender / Activar</option>
+                  <option value="off">Apagar</option>
+                  <option value="toggle">Alternar</option>
+                  <option value="press">Pulsar (botón)</option>
+                </select>
+              </label>
+            </div>
+            <div class="ha-controls-meta">
+              <span id="haEntityCount">0 entidades</span>
+              <label class="ha-toggle">
+                <input id="haControllableOnly" type="checkbox" />
+                Solo controlables
+              </label>
+            </div>
+            <div class="ha-controls-actions">
+              <button id="haRefreshBtn" class="btn btn-secondary btn-block" type="button">↻ Actualizar inventario</button>
+              <button id="haProposeBtn" class="btn btn-primary btn-block" type="button">Proponer acción gobernada</button>
+            </div>
+          </div>
+
+          <!-- Active Proposal / Approval Card -->
+          <div class="card panel">
+            <div class="panel-header">
+              <h3>Security Approval Gate</h3>
+              <span id="approvalBadge" class="status-badge pending">NO PROPOSAL</span>
+            </div>
+
+            <div id="proposalCard" class="proposal-card empty">
+              <p class="placeholder-text">No proposed action is currently awaiting human confirmation.</p>
+            </div>
+
+            <div class="approval-actions" id="manualApprovalActions" style="display:none;">
+              <button id="confirmBtn" class="btn btn-success btn-block">✓ Authorize (Affirmative Speech)</button>
+              <button id="rejectBtn" class="btn btn-danger btn-block">✕ Reject / Ambiguous (Fail-Closed)</button>
+            </div>
+          </div>
+
+          <!-- Cryptographic Receipt Card -->
+          <div class="card panel">
+            <div class="panel-header">
+              <h3>Cryptographic Audit Receipt</h3>
+              <span class="badge-pill">SHA-256 SEALED</span>
+            </div>
+            <div class="audit-body">
+              <div class="data-row"><span>Permit ID:</span><code id="auditPermitId">vxp_none</code></div>
+              <div class="data-row"><span>Action ID:</span><code id="auditActionId">act_none</code></div>
+              <div class="data-row"><span>Signature:</span><code id="auditSignature">[sealed_hmac_256]</code></div>
+              <div class="evidence-hash">
+                <span class="hash-label">Evidence SHA-256 Hash:</span>
+                <span id="evidenceHash" class="hash-val">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- HTR Counter Card -->
+          <div class="card panel htr-card">
+            <div class="htr-header">
+              <span class="htr-kicker">HUMAN TIME RETURNED</span>
+              <span class="htr-class">MEASURED</span>
+            </div>
+            <div class="htr-value-wrap">
+              <span id="htrCounter" class="htr-number">+0.0</span>
+              <span class="htr-unit">minutes</span>
+            </div>
+            <p class="htr-desc">Human engineering time saved in manual field dispatch, diagnostic cycles, and PBX configuration.</p>
+          </div>
+
+        </aside>
+
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div>InnerOS Executable World · executable.creatorcore.ai</div>
+      <div>Repository: <code>Rafa-Innerchispa/inneros-executable-world-2026</code> · Sovereign local core</div>
+    </footer>
+
+  </div>
+
+  <script src="/app.js"></script>
+  <script src="/assemblyai-voice.js"></script>
+</body>
+</html>

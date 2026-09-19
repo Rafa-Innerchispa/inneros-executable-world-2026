@@ -1,0 +1,15 @@
+[Unit]
+Description=InnerOS Executable World (provider-agnostic local core)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/inneros/inneros_core/workspaces/inneros-executable-world-2026
+EnvironmentFile=%h/.config/inneros/executable.env
+ExecStart=%h/inneros/inneros_core/workspaces/inneros-executable-world-2026/.venv/bin/python -m voiceops.webapp --host 0.0.0.0 --port 8769 --reasoner synthetic
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
