@@ -1,0 +1,12 @@
+{
+  "project": "inneros-executable-world-2026",
+  "repository": "Rafa-Innerchispa/inneros-executable-world-2026",
+  "role": "execution_witness",
+  "entry": "agents/execution-witness/handler.py",
+  "description": "Thin external witness for sanitized InnerOS execution receipts. Does not host the core runtime.",
+  "routes": {
+    "GET /": "health",
+    "POST /": "witness_receipt"
+  },
+  "forbidden_payload_fields": ["token", "secret", "password", "api_key", "signature"]
+}
