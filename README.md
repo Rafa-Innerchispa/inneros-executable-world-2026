@@ -1,5 +1,16 @@
 # InnerOS Executable World 2026
 
+<!-- INNEROS-NARRATIVE:START -->
+> **InnerOS role:** R&D / Hackathon Validation  
+> **Lifecycle:** Submission snapshot  
+> **Lineage:** Executable World 2026 validation of provider-agnostic execution, approval, permits, evidence, and optional capability adapters.
+>
+> This repository tests how InnerOS can attach and remove sponsor or cloud capabilities without making the operational core dependent on them.
+>
+> **InnerOS principle:** hackathons are validation environments. Reusable capabilities are extracted into maintained products and platform layers rather than treated as disconnected one-off projects.
+<!-- INNEROS-NARRATIVE:END -->
+
+
 [![CI](https://github.com/Rafa-Innerchispa/inneros-executable-world-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/Rafa-Innerchispa/inneros-executable-world-2026/actions/workflows/ci.yml)
 
 **Public repo:** https://github.com/Rafa-Innerchispa/inneros-executable-world-2026  
